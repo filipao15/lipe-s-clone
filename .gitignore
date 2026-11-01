@@ -1,0 +1,17 @@
+# ============================================================================
+# PROTEÇÃO DE SEGURANÇA (NUNCA ENVIAR CHAVES OU SESSÕES PRO GITHUB!)
+# ============================================================================
+.env
+*.session
+*.session-journal
+bot.pid
+
+# Histórico privado de conversas em tempo real
+data/chat_histories.json
+
+# Cache do Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/

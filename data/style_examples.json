@@ -1,0 +1,759 @@
+{
+  "estatisticas_estilo": {
+    "total_linhas_historico": 454236,
+    "conversas_incluidas": [
+      "Karol Jensen ♥️ (389.966 linhas)",
+      "Vicky (64.270 linhas)"
+    ],
+    "mensagens_recentes_analisadas": 19250,
+    "tamanho_medio_por_mensagem_caracteres": 21.6,
+    "media_mensagens_seguidas_por_resposta": 2.6,
+    "porcentagem_inicio_minuscula": 19.0,
+    "girias_e_expressoes_tipicas": [
+      "oxe",
+      "OXE",
+      "ixi",
+      "ixiii",
+      "vei",
+      "vey",
+      "veiii",
+      "mds vei",
+      "ne vei",
+      "O praisso",
+      "Opora",
+      "querdita",
+      "Etaaaa gloriaaa",
+      "ETA groriaaaaaa",
+      "Zé",
+      "zeee",
+      "mule",
+      "mininaaaa",
+      "fia",
+      "Deixeeeeeeeee",
+      "deixe ele",
+      "aff",
+      "AFFFFF",
+      "amoooo",
+      "Amoo???",
+      "Siiim",
+      "Naoo",
+      "Vdd",
+      "Juro",
+      "Que viagem",
+      "Vou te contar uma q oia",
+      "eu n tankei",
+      "Vagabundagem vey"
+    ],
+    "risadas_tipicas": [
+      "SKAKDAKDAKDKA",
+      "KAKAKAJAKAKAKAKAKAKAKAKAKAKSKSKAKSKAKSKAKSKAAKAKQKAKQ",
+      "Kskskwkskwkskskskskwkskakw",
+      "SAKJDAKJKDAKDAKJADKJDAKDKA",
+      "Kkkkkskakakakakakaka",
+      "KKKKKKKKKKKKKKKKKKKKKKK",
+      "Jkkkkkkkkkkkk"
+    ]
+  },
+  "exemplos_reais": [
+    {
+      "chat": "Karol",
+      "recebido": "vou começar assim que a Sofia sair\nahhhh lulaaa\n2026 é meu ano bbs",
+      "resposta": "aiiii meu presidasss"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "fiquei gag quando soube que o homem lá de dentro tinha me indicado\nfiquei assim",
+      "resposta": "rapaz um anjo viu"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "o chefe de lá foi bem rígido comigo na entrevista, mas depois ele suavizou e disse que tava tentando me assustar pra ver se eu realmente tava preparada\nkakakkakakakakkakak\nele \"ainda quer?\"",
+      "resposta": "SHUAHDAUDFAUFDAHUFAFAFAUHFAUFAUHAFAUHFUAUAFUFAHFA\naff e quem nao quer"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "acha que eu tenho medo de cara feia bb? passe o bastão pra cá\nfoi nem uma entrevista na real\neles já tinham me contratado por indicação, aí ele só explicou a pressão que é\noiiii\nquer que eu conte por áudio como foi ou quer ir call depois?",
+      "resposta": "Simmm\nA cobrança é muito alta mesmo\nTenho uma amiga (Vicky, de São Paulo) ele trabalha na área\nSó pelo fato de ser 12x36\nJá melhora sua sanidade mental"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "oioiii\nboa tarde, tudo bom??\nami\namo\ntô bemm",
+      "resposta": "amoooo\ntbm to vei\nDeixeeeeeeeee\nTadinha"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "aff\nchorei hoje viu",
+      "resposta": "Pqqq\nOxe vc n ia supervisiornar eles??"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "eu vou supervisionar os que ficaram\nos que eu tava por bastante tempo saíram tudo kakakak\ntipo o carlos\nque tava lá desde o meu começo",
+      "resposta": "Carlos saiu????"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "sim",
+      "resposta": "MANO\nNao\nPoxa velho\nCarlos era seu best presencial ne\nEle mora perto?"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "a gente vai se verr\nnão tanto\nsim\nmas aprendi muitas coisas com eles 🤍",
+      "resposta": "Poxa\nEle mora onde\nSim, sim\nAgr voa garota"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "norte da ilha",
+      "resposta": "Isso demora quanto tempo\n1h?"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "sim",
+      "resposta": "Longinho viu\nMas é na mesma cidade\nPior nós q n é\n😭✖️"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "JKKKKKKKK sim\num querido ele\nvai ficar tudo bem\nele vai encontrar novas coisas\ne eu começarei numa nova fase",
+      "resposta": "Sim\nSe fosse aq ele tava era lascado\nPq ele saiu?\nSim\nOh mds"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "pq a empresa é estressante",
+      "resposta": "Ent ele mesmo pediu ora sair, foi?\nPra*"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "eles fazem as coisas erradas e estressa os atendentes",
+      "resposta": "Q bad vei"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "oioii\nnossa hoje foi muiiiito corrido, até chorar eu chorei",
+      "resposta": "Oq houve?\nAq tbm foi"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "a Aryane não veio trabalhar e como tinha muita coisa importante eu fui supervisora no lugar\nsupervisora e atendente ta",
+      "resposta": "Aí ja ta explorando\nVc chorou na empresa foi\nAlguem viu?"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "não kkkkkkkkk",
+      "resposta": "Mds vei\nTu tem q procurar um psicólogo"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "aí um telefone estragou\nn sabia oq fazer\nKKKKKKKKKK\nmas aprendi",
+      "resposta": "Jkkkk fez oq"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "abri um chamado aí o cara foi lá, o técnico\namo\nexpliquei pra ele\nteve entrevista, grosseria da funcionária da empresa me cobrando coisa",
+      "resposta": "Mds vei\nQ inferno foi"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "juro\nisso tudo no meu primeiro dia\nsó pra me assustar",
+      "resposta": "Relaxa depois piora"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "aninhaaaa",
+      "resposta": "Elaaa"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "ta melhooor amor??",
+      "resposta": "Siiimm\nSaiu a mancha do pulmão"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "ebaaaa",
+      "resposta": "oi karoles\nta melhor?:"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "oioi, sim",
+      "resposta": "to bem nao\nOioi karolli"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "oioi\ntudo bem?",
+      "resposta": "Oxe ja acordada\nNao e vc\nMds mudou seu horario tbm foi"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "das 7 até 19\nkakakaka",
+      "resposta": ".....\nMds\nMds"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "ele mandando mds duas vezes kkkkkkkkkk",
+      "resposta": "Sim\nÉ muito tempo\n11 horas de trabalho"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "loucura ta\ncheguei aqui já tô na função",
+      "resposta": "Loucura mesmo\nFico sentido com tu trabalhando tanto assim"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "tá de boa por enquanto\ntô na minha pausa agora",
+      "resposta": "Amo\nQue bom que deu uma tranquilizada"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "sono",
+      "resposta": "Mds ja fiz a faxina do século aq em casa e tu ainda tava no trabalho\nJa chegou?\n9:35???"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "19:35\nkkkkkkk",
+      "resposta": "Ata kkkkkkkk\nQue susto\nVc n conseguiu pegar ne?\nOu ja ta?\nComo vc ta?"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "simm",
+      "resposta": "Q bommm"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "ele sai do centro 19:35, chega no meu ponto 19:38\ntô cansada, mas tô bem\nvitor um fofo comprou sorvete pra mim porque ontem eu chorei de sobrecarga e disse \"eu só queria um sorvete 😭\"\nKAKAKAKKAKAKAKKA",
+      "resposta": "Kkdhfufjrurugujgig\nAmo"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "affs amo",
+      "resposta": "Ainda ta tendo contato com ele e\nQ bom\nEle continua gentw voa,"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "yes",
+      "resposta": "?*\nBoa"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "sim sim",
+      "resposta": "Deixe\nCom o negao dela"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "mais que amigos friends",
+      "resposta": "Jjifhyfyrgdhrydhdygdfgyfif\nDeixeee\nAgr tu e supervisora dele ne"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "sim\nnão posso mais ficar de conversinha\nhoje eu vi um babado lá no celular da supervisão e não posso contar pra ninguém\nque ódio kaakakakakakak",
+      "resposta": "Que babado mule"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "2 na verdade\nsei la oq\nmds",
+      "resposta": "O surtooo"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "simmmm",
+      "resposta": "mds\ntd envolvendo psicológico\nvc ta melhor?"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "oioii\nsim, era só cansaço e sono kakakka",
+      "resposta": "Oioi\nTd bem?"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "sim\ne com você?",
+      "resposta": "Nao"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "por que",
+      "resposta": "Tinha um amigo q deixou de ser meu amigo q me tratou muito mal\nMas n quero entrar em detalhes\nQuero esquecer"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "mds",
+      "resposta": "eu só sofro com os outros pprt"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "real vei\nfoi de madrugada isso?",
+      "resposta": "agora pouco"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "tem que parar de considerar muito as pessoas",
+      "resposta": "é vdd\neu saí do grupo\nCe sabe q n sou disso mas n teve jeito"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "quando quiser falar oq houve\nsou toda ouvidos",
+      "resposta": "Ta bom\nDeixa eu melhorar daí te falo"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "okkkkk",
+      "resposta": "E vc ta bem"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "estou\nhoje tô em casa",
+      "resposta": "Ebaaa\nTá descansada?\nVc acha essa escala melhor pra ti?"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "sim\ndormi mais que a cama hoje",
+      "resposta": "Ta mais que certa kshuugusudutht"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "yesssss\nkakakmakakakak sim\nqueria passar com vocês e com minha família junto\num dia a gente tem que proporcionar isso",
+      "resposta": "A gente vai"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "vamoooooo",
+      "resposta": "deixe ele"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "real",
+      "resposta": "Tadinho\nAna celia 2 kskssksksksks deixe ela"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "deixe ela que ela não quer guerra com ninguém (quer sim",
+      "resposta": "Kskskwkkswkkwks\nSonhei que eu tava namorando um menino\nEle me pediu em namoro\nOxe\nQue viagem"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "amooooooo\né um aviso",
+      "resposta": "SKAKDADAKDFAFAKFAKFA\nixi\npesou\no sonho foi babado"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "bora exus",
+      "resposta": "a paralisia no caso"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "oiiiii\neu amo",
+      "resposta": "Oiii karolesss"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "oioiii\nfalei com ramon hoje",
+      "resposta": "Ixiii\nFoi como"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "ele tá tranquilo",
+      "resposta": "Se resolveram foi"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "KKKKKKKKKKKKKKKK",
+      "resposta": "Mskskskdskkskwsksksksks"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "voce muito assim só de eu falar esse nome",
+      "resposta": "Sim qjskwjskwkdkakskskqkskwks\nAff\nEu tava falando com ele ontem\nEle me dando conselho pra sair de salvador"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "deixe eleeeeeeeeee",
+      "resposta": "Dejxe"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "sim simm, foi um dos assuntos que tivemos\nele disse que salvador ta ruim de emprego e etccc",
+      "resposta": "Ele tá fazendo curso técnico em administração\nQue bom ne"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "simmm\nele trocou de celular\ntô feliz por ele\n###pensativo",
+      "resposta": "Siiim\nVdd\nEle comprou um s25"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "amooooo",
+      "resposta": "Eu quem indiquei"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "cê viu as fotos que ele tirou",
+      "resposta": "Viiii\nSamsung é perfeito ne vei como pode"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "lindeeee\nnaoo",
+      "resposta": "OXE\npensei que tava em casa\nSKAKDAKDAKDKA"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "tô trabalhando, mas como hoje é domingo não tem muito oq eu fazer\naí tô aqui limpando as coisas\nkakakakakak",
+      "resposta": "H78SAUHDAHDUA\namoooo\ncuidadora de lar empresarial"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "juro\nsenão tudo é culpa do supervisor né",
+      "resposta": "AFFFFF\nSAKJDAKJKDAKDAKJADKJDAKDKA\nque infernor\ntirando isso pelo menos o salário é um pouco gordo"
+    },
+    {
+      "chat": "Karol",
+      "recebido": "vou comprar um notebook",
+      "resposta": "Amoo???\nSAKDKAKDAKDA\nAFFF\neu te recomendo um depois"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Saudades, lipe rukoooo",
+      "resposta": "Tbmmmmmm viadaaa\nTrabaiano ne?\nTadinha vei"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Dexe ele com a beleza deleee",
+      "resposta": "Deixeee kkkkkkkkkkkkkkkkkkkkk\nO sofrimento vei\nTu tem quanto tempo de descanso?"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "30 min\nKkkkkkkkkkkk\nDas 17h as 17:30h",
+      "resposta": "Mds...."
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Nem me fale\nNem me faleee\nHahashhs\nChega da nos nervos aq",
+      "resposta": "Kskdkskskskskakska\nO tristeza\nTa como hj??"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Hj to d boa\nTo me arrumando pra ir no shopping",
+      "resposta": "Que linda vc ta meu amor"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Falou igual um senhorzinho kkkkkk",
+      "resposta": "Ta chiquerrimaaaa"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Perdi 10kg\nO gloria",
+      "resposta": "KAKSKWKWKSKSKSSKKWKXSKSKSKKAXKAKSKS\nSiiimmm eu percebiiii\nPerdeu bastante\nParabéns vickyzinhaaa\nEu to fazendo o contrário"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Aveee ajahhshs mas vc perde rápido eu acho\nSeu matabolismo é rapido, n é?",
+      "resposta": "Siiimmm\nEu sou mesomorfo\nTenho bastante massa muscular\nCara de chefonaaaa\nEu amo tanto vcs"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Lindoo\nTo morrida d sdds dai",
+      "resposta": "Ai viado\nViada\nTbm to morrendo de sdds"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "E seu trabalho?",
+      "resposta": "Depois de amanhaaaa\nja começoo"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Osh menino, n era dia 21?\nAchei q ja tava ate atuanfo",
+      "resposta": "era dia 14\nmas escreveram o contrato errado\nkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Kkkkkkkkk ai q rolooo",
+      "resposta": "teve que reescrever td\ne aí mandar a universidade assinar tbm"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Querooooo",
+      "resposta": "foi quando karol veio ksakdkadkakdakdakdakadkdakda"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Começou trabaia?",
+      "resposta": "Siiimmm\nFoi maasaaa\nFaço praticament nada\nSó ajeitar coisa aqui e alí"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Que gostoso\nEu ja invejo\nFaço de td kkkkk",
+      "resposta": "Me chamaaa\nMeu casalllll\nSou fã\nJacomi\nQue fofooo"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Venhaaa meu gostosooooooooo\nHein, é oq?",
+      "resposta": "KSKWKWKWKWWKQKKWKQWKQKSKQKSKSKDKKWKDKWKWKWKWKW"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Bom diaaaa\nComo estais tu??\nEu bemm\nEita\nQue q houve?",
+      "resposta": "Deus e mais"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Mizericordia",
+      "resposta": "Mdssss"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Ramon perdeu mesmo a cabeça né\nFala serio\nE nem vai pelo visto\nAgr o nenem mora cm a gente\nPerderam a guarda definitiva",
+      "resposta": "se arrepende vei\nrum suspeite viu\nkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk\naquele alí n deixa passar nem ponta de agulha\nkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Kkkkkkkkkkkkkkkk",
+      "resposta": "Vai fazerrr"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Agr estoy no trabaio",
+      "resposta": "tava nada viada\nto dodoi\nkkkkkkkkkkkkk"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Eitcha\nEu to com a tosse só\nVe o ultimo story da alexia no insta\nMkkkkkkkkkkkkkkkkk",
+      "resposta": "Eu vi kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkjkk\nParece msm um pouquinho mmkkkkkkkkkkk"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Meu funcionário é uma disgrama\nMandei a fig pra ele, ele lançou a frase no insta\nKkkkkkkkkkkkkkkkkk",
+      "resposta": "Kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk\nEle botando o emoji de chuva"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "É q aq ta chovendo\n😂😂😂😂😂😂🥰\nAi mandei pra ele a fig\nAi a desgrama q ele faz",
+      "resposta": "KKKKKKKKKKKKKKKKKKKK eu imaginei veii kkkkkkkkkkkkkkkkkkkkkkkkk eh mole?\nAMEM\nMMKKKJJJJKKKKKKKKKKKKK"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "As fig q ele me mandou\nAchei sua cara\nKkkkkkkkkkkk",
+      "resposta": "KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK\nMdssss\nBem eu\nChris surto dnv foi? me tiraro da familiaa\nKKKKKKKKKKKKKKKKKKKKKK"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Kkkkkkkkkkkkkkk\nEssa alma quer reza",
+      "resposta": "Aí tem coisa kakamamammaaamaak"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Q diabé isso\nKkkkkkkkkkkkkkkkkkkk\nPor um segundo achei q era cvs de ramon\nKkkkkkkkkkkmmmmkmmm",
+      "resposta": "MKKKKKKKKKKIIKKKKKKKKKKKKKKKKKKKKKKKKKK\nVei eu n tankei qnd vi isso"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk\nMas do nd gente, q isso\nPra mim fica aparecendo aquelas historias em quadrinhos\nSe aparecer eu te mando kkkkkkkkkkkkkk",
+      "resposta": "Kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk la eleeeee\nKkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk\nRachei"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Kkkkkkkkkkkkkkkkkk mas pra mim é no fb q aparece\nEsse app ctz q é de ramon e alexa\nFoi só ele manda msg e blan, tome!",
+      "resposta": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk\niguallll"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Bom diaaa\nQ q o senhor ta sem foto\nVou te descer a porrada\nE essa voz d sono aii\nN foi trabalhar?",
+      "resposta": "Vai dar certo viadaaa"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Saiu faz tempo?\nEitchaaa\nMas creindeuspai\nQ macumbaria\nEu tava no over kkkkkk",
+      "resposta": "Oi vickyzinha, tudo bem?\nVamo gameprays quando tu tiver desocupada?\nInclusive estavamos falando esses dias quando q tu vai vir pra ca\nSaudades\n🥺"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Da onde se arrumou isso? Kkkkkkkkkkkkkk\nMenino esses dias a unica coisa q faço no pc é over, pq comprei o passe\nFora isso mal uso pc",
+      "resposta": "Kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk antigao\nOloko viada"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Bom diaa\nSe quiser, jogamos hj",
+      "resposta": "Bom diaaa zeee"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Q milagre acordou cedo\nN dormiu!\n?",
+      "resposta": "Acordei?\nJKJKKKKKKKKKKKKKDAKDAKDKADAKDAKD\nnaooo"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Ixiiii kkkkkkk\nE pq? Insonia?",
+      "resposta": "eu acabei de tomar 8 gotas de neuleptil e um clonazepam pq n to conseguindo dormir\nKSAKDAKDKAKDAKDA\nja ate sai do cll\nantes\ne n adianto"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Eita q vai capotar ate umas hrs",
+      "resposta": "vai ser na base do odio msm\nsim kkkkkkkkkkkkkkkkkkkkkkkkkkkk\njaja começo a ficar lerdo e falar td embolado\nKKKKKKKKKKKKKKKKKKKKKKKK"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Aq ta chovendo, ta uma delicia pra dormir",
+      "resposta": "aaaiii que deliciaaa\ntá quantos graus aí?"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Atualmente 20\nEsses dias atras estava um frio q só Deus",
+      "resposta": "Deus é maiss\nAí quando faz frio faz pra valer"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Ss kkkkk tava abaixo de 10",
+      "resposta": "mds??"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Cm chuva d granizo e td mais",
+      "resposta": "hj ce ta de folga??\ngloria deus\npensava que tu era 6x1"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Amem kkkkkkkkk",
+      "resposta": "e folgava sábado"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Eu folgo 1 sab ss e 1 sab n\nPorem hj é domingo\nKkkkkkkkkkkk",
+      "resposta": "Hummmm"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "N trabalho d domingo",
+      "resposta": "gloria deusss"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "N mais, gloria a deus",
+      "resposta": "tu acordou cedo\ncostume, né?"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Pior q n, eu trabalho no turno da tarde",
+      "resposta": "que deliciaaaa"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Eu entro sempre 13:30h de semana e qnd vou aos sab entro ai ss entro as 08h",
+      "resposta": "acordar de manhã e inferno\nafff logo no sábado\nngm merece\nkkkkkkkkkkkkkkkkkkkkkkkk"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Sim kkkkk ai sabado e 1 meu e 1 da brenda pra ir\nA gente intercala",
+      "resposta": "Entendii viadaa\ne como vc ta??\nta bem??"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Estou simm\nE vc?\nMenino inventei d tomar o monjaro ontem",
+      "resposta": "Tô melhor hojeee"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "N deu reação nenhuma\nMas tenho cu na mao",
+      "resposta": "Nenhuma??\nN sentiu enjoo nem nd?"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Por enquanto\nKkkkkkkkkk\nPor enquanto n",
+      "resposta": "Que bom veiii"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Ixi, voltou lipe?\nSera q tem haver cm a sem vergonhice do pessoal do trabalho anterior?",
+      "resposta": "volto viada 💔💔 mas agora eu tomo remédio e agora vou pro psicólogo\nmais ou menos\nmas to com pressão pra buscar qualquer emprego tbm\npq n to conseguindo achar nd por aqui"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Com pressao?",
+      "resposta": "e muita coisa de ana celia tambem\nmenina ela ta acabando com tudo\nchega mel vai entregar ela pra minha tia deco\nos dois kkkkkkkkkkkkkk"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Emprego ta dificil msm, mas vc ta cm faculdade legal e vai encontrar algo bom",
+      "resposta": "Simmm"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Como assim?",
+      "resposta": "é questão de tempo\nEla tá tendo muitas crises\ne a gente achou que era do autismo\nmas eu sempre dizia que isso já n era mais autismo\naí fui pesquisar"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Simmm, vc é mt inteligente",
+      "resposta": "obg viada  ❤️ tu tbm"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "A deixa eu perguntar, ela ta ficando com desvio no olho? Tava vendo as fotos  dela e parece q ela tava cm olho meio tortinho\nE sera q ela n fica assim por mudança de ambiente?\nPq ela morava cm sua tia n era? Ai ela vai e muda td\nConheçoo\nOlha aq",
+      "resposta": "Nao"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Avemaria filipe\nOloko, o tarja preta aq eles dao em posto\nEitcha, nao sabia\nPassadaaaa\nPior q é assim msm",
+      "resposta": "Do fudo do meu corcao\nMkkkkkkkkkkkkkkkkkkkkkk"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Simmmm kkkkk mas esse nunca usei\nMas já ouvi falar\nMas vai dar certo, lipe\nVc come bastante?\nE lembro q estavam na academia, pararam?",
+      "resposta": "KKKKKKKKKKKKKKKKKKKKKKKK"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Entao tds ja sabem, menos a vea\nMkkkkkkkkkkkk\nKkkkkkkkkkkk\nVcs sao fogo\nE vc n ta cm sono ainda n?",
+      "resposta": "Dormi jkkkkkkk\nVou pra essa\nTomara que eu passe vei\nEssa vaga ta pfto"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Sera q mudou mt? Kkkkkk\nMt chiqueeee\nBoa sorte lipe\nJa deu certo\nBom diaaa",
+      "resposta": "siimmmm"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Que isso? Atacante mkkkkkkkkkkk",
+      "resposta": "KAKAKAJAKAKAKAKAKAKAKAKAKAKSKSKAKSKAKSKAKSKAAKAKQKAKQ"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Kkkkkkkkkkkkkk\nTa todo pomposo\nMorrida kkk e vc?\nKkkkkkkkkkkkkkkk eu tinha esquecido dss",
+      "resposta": "Sua boneca do avataria??"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Naooo kkkkkkk\nA clove do vaval\nComprei hama beads\nTo fznd ela em pixel art",
+      "resposta": "Aaaaaaaa"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Vamos mais tardee",
+      "resposta": "Q massa veiii\nVamossss\nColocar o papo em dia"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Ta ficando um xuxuzinho\nKkkkkkkkkkk\nVamooos\nOq deve ter fofoca",
+      "resposta": "Achei fofo demais\nAlexia kkkkkkkkkkkkkkkkkkkkkk"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Imagino kkkkkkk",
+      "resposta": "Vou te contar uma q oia"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Kkkkkk descobri tem umas 2 semanas\nE ja comprei",
+      "resposta": "Da pra fazer qualquer coisa, ne??"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Simmmm\nSimmm\nSegunda tb",
+      "resposta": "Q fofinho 🥺🥺🥺❤️❤️❤️"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Bom diaa\nEu capotei cedo tb kkkk",
+      "resposta": "Jkkkkkkkkkkkk bateu o sono em nós\ndeixe ele"
+    },
+    {
+      "chat": "Vicky",
+      "recebido": "Eita como ta fullhdzudoooo",
+      "resposta": "Deixeeeeeeeee"
+    }
+  ]
+}

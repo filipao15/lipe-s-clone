@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mapa Neural de 7 Humores — Clone @lilkja_clone_876_bot</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --background: #09090b;
+      --foreground: #f4f4f5;
+      --card: #18181b;
+      --content: #27272a;
+      --border: #3f3f46;
+      --primary: #ec4899;
+      --primary-foreground: #ffffff;
+      --secondary: #27272a;
+      --secondary-foreground: #e4e4e7;
+      --muted-foreground: #a1a1aa;
+    }
+    body { background-color: #09090b; color: #f4f4f5; font-family: 'Segoe UI', system-ui, sans-serif; }
+  </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-6">
+  <div class="max-w-5xl w-full bg-[#18181b] border border-[#3f3f46] rounded-2xl p-6 shadow-2xl space-y-4">
+    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-[#3f3f46] pb-4">
+      <div class="flex items-center gap-3">
+        <div class="w-11 h-11 rounded-xl bg-gradient-to-br from-pink-500 via-purple-500 to-indigo-500 flex items-center justify-center text-white font-bold text-2xl shadow">
+          🧠
+        </div>
+        <div>
+          <h1 class="text-xl font-bold text-white">Mapa Neural de 7 Humores — Meu Clone (@lilkja_clone_876_bot)</h1>
+          <p class="text-xs text-zinc-400">462.605 linhas reais (Murilo 🥰 • Vendell 🤝 • Karol ♥️ • Vicky 🎮) + 🌌 Astrofísica & Cosmologia</p>
+        </div>
+      </div>
+      <div class="flex gap-1.5 bg-zinc-800 p-1 rounded-xl border border-zinc-700">
+        <button onclick="setChartType('radar')" id="ctype-radar" class="px-3 py-1 rounded-lg text-xs font-semibold bg-pink-600 text-white">🕸️ Radar</button>
+        <button onclick="setChartType('doughnut')" id="ctype-doughnut" class="px-3 py-1 rounded-lg text-xs font-semibold text-zinc-300">🍩 Rosca</button>
+        <button onclick="setChartType('polarArea')" id="ctype-polarArea" class="px-3 py-1 rounded-lg text-xs font-semibold text-zinc-300">💠 Polar</button>
+      </div>
+    </div>
+
+    <div class="flex flex-wrap gap-2">
+      <button onclick="setDataset('geral')" id="btn-geral" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-pink-600 text-white">🌐 Geral (462k)</button>
+      <button onclick="setDataset('murilo')" id="btn-murilo" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-800 text-zinc-200">🥰 Murilo (Bem Afetivo)</button>
+      <button onclick="setDataset('astro')" id="btn-astro" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-800 text-zinc-200">🌌 Astrofísica & Universo</button>
+      <button onclick="setDataset('vendell')" id="btn-vendell" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-800 text-zinc-200">🤝 Vendell (Parceria & Sonhos)</button>
+      <button onclick="setDataset('karol')" id="btn-karol" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-800 text-zinc-200">♥️ Karol (Reflexivo)</button>
+      <button onclick="setDataset('vicky')" id="btn-vicky" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-800 text-zinc-200">🎮 Vicky (Gameplay)</button>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+      <div class="md:col-span-5 bg-zinc-900/90 border border-zinc-800 rounded-xl p-4 flex flex-col justify-between">
+        <div class="flex justify-between items-center mb-2">
+          <span class="text-xs font-semibold text-zinc-300">Assinatura Emocional</span>
+          <span id="dominant-badge" class="text-xs px-2 py-0.5 rounded bg-zinc-800 text-pink-400 font-semibold"></span>
+        </div>
+        <div class="h-64 relative">
+          <canvas id="moodChart"></canvas>
+        </div>
+      </div>
+
+      <div class="md:col-span-7 space-y-3">
+        <div id="bars-container" class="bg-zinc-900/90 border border-zinc-800 rounded-xl p-4 space-y-2"></div>
+        <div class="bg-zinc-900/90 border border-zinc-800 rounded-xl p-4 space-y-2">
+          <div class="flex justify-between items-center">
+            <span class="text-xs font-bold text-white">💬 Simulador Ao Vivo do Clone</span>
+            <span id="sim-mood-tag" class="text-xs px-2 py-0.5 rounded-full font-semibold"></span>
+          </div>
+          <div id="chat-preview" class="bg-zinc-950 border border-zinc-800 rounded-lg p-3 space-y-1.5 text-xs"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    // Reutiliza os mesmos dados reais do widget
+  </script>
+</body>
+</html>
