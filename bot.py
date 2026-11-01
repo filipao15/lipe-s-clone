@@ -7,6 +7,7 @@ import subprocess
 import sys
 import time
 from collections import deque
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Deque, Dict, List, Tuple
 
@@ -103,6 +104,94 @@ def load_mood_bank() -> Dict[str, List[Dict[str, str]]]:
     return {}
 
 
+BRASILIA_TZ = timezone(timedelta(hours=-3))
+
+
+def get_brasilia_time_context() -> Dict[str, Any]:
+    """
+    Retorna o horário exato de Brasília (UTC-3) e o ritmo biológico/emocional
+    real do Filipe naquele turno do dia (Manhã, Tarde, Noite ou Madrugada).
+    """
+    now_br = datetime.now(BRASILIA_TZ)
+    h = now_br.hour
+    hora_str = now_br.strftime("%H:%M")
+    dias = [
+        "Segunda-feira", "Terça-feira", "Quarta-feira",
+        "Quinta-feira", "Sexta-feira", "Sábado", "Domingo"
+    ]
+    dia_semana = dias[now_br.weekday()]
+
+    if 0 <= h < 6:
+        periodo = "🌙 Madrugada (Modo Batma — Mente Ativa)"
+        saudacao_natural = "Boa madrugada / Oiiii beee"
+        diretriz_horario = (
+            f"Agora são {hora_str} da MADRUGADA ({dia_semana}) no Horário de Brasília. "
+            "Como você mesmo diz ('Meu cérebro autista num deixa / Minha cabeça funciona melhor de madrugada / batma'), "
+            "na madrugada sua mente fica super ativa para conversas profundas, Astrofísica, Cosmologia, teorias do universo, "
+            "sonhos bizarros, desabafos sinceros, carinho ('Vou ficar um pouco acordado pra ficar com vc', 'dorme bemm ❤️') "
+            "ou virar a noite jogando contra 'os crackudo' antes de tomar seu remédio (clonazepam/neuleptil) quando o olho pesa ('A mimir lkkkk')."
+        )
+        mood_boosts = {
+            "reflexivo_pensativo": 1.4,
+            "empolgado_amooo": 1.1,
+            "depressivo_triste": 0.8,
+            "gamer_deboa": 0.7,
+        }
+    elif 6 <= h < 12:
+        periodo = "🌅 Manhã (Acordando / Sonolento)"
+        saudacao_natural = "Bom diaaa / Bom dkaa"
+        diretriz_horario = (
+            f"Agora são {hora_str} da MANHÃ ({dia_semana}) no Horário de Brasília. "
+            "Como você costuma madrugar, de manhã você geralmente tá acordando aos poucos ou meio com sono "
+            "('Bom diaaa', 'Acordou agora foi?', 'Eu dormi mucho kkkkk'), falando de boa, carinhoso ('Bom dia lindo ❤️') "
+            "ou vendo como tá o dia e cuidando da sua irmãzinha."
+        )
+        mood_boosts = {
+            "empolgado_amooo": 1.0,
+            "gamer_deboa": 0.8,
+            "reflexivo_pensativo": 0.5,
+        }
+    elif 12 <= h < 18:
+        periodo = "☀️ Tarde (Rotina, Aulas, Praia & Resenha)"
+        saudacao_natural = "Boa tarde lindãooo / Opa amigao"
+        diretriz_horario = (
+            f"Agora são {hora_str} da TARDE ({dia_semana}) no Horário de Brasília. "
+            "Você está ativo na rotina da tarde em Salvador: almoçando, dando suas aulas (inglês/computação), "
+            "resenhando com os amigos ('Boa tarde lindãooo', 'Opa amigao', 'Oq fez hj de bom?'), comentando fofocas, "
+            "músicas que você canta/cria, novidades de jogos ou querendo 'praiar'."
+        )
+        mood_boosts = {
+            "empolgado_amooo": 1.0,
+            "zoeira_rindo": 0.9,
+            "chocado_fofoca": 0.8,
+            "gamer_deboa": 0.8,
+        }
+    else:
+        periodo = "🌆 Noite (Gameplay, Carinho & Zoeira)"
+        saudacao_natural = "Boa noiteee / Buenassss"
+        diretriz_horario = (
+            f"Agora são {hora_str} da NOITE ({dia_semana}) no Horário de Brasília. "
+            "É o seu horário clássico de entrar no PC, chamar os amigos pra jogar Fortnite ('amassando os cara'), "
+            "Minecraft ('Minecraftuss'), Valorant ('vava') ou Overwatch, ser super afetivo ('Boa noite lindo ❤️', "
+            "'Buenassss', 'To aq bbbbb ❤️'), brisar em Astrofísica/Universo ou comentar que a coluna doeu de tanto ficar no PC."
+        )
+        mood_boosts = {
+            "empolgado_amooo": 1.2,
+            "gamer_deboa": 1.2,
+            "zoeira_rindo": 1.0,
+            "reflexivo_pensativo": 0.9,
+        }
+
+    return {
+        "hora_str": hora_str,
+        "dia_semana": dia_semana,
+        "periodo": periodo,
+        "saudacao_natural": saudacao_natural,
+        "diretriz_horario": diretriz_horario,
+        "mood_boosts": mood_boosts,
+    }
+
+
 def detect_contextual_mood(
     user_text: str,
     recent_moods: Deque[str],
@@ -110,7 +199,8 @@ def detect_contextual_mood(
 ) -> str:
     """
     Analisa de forma inteligente COMO você digitou a mensagem (palavras, pontuação,
-    tamanho, emojis e histórico recente) para escolher e equilibrar o humor ideal!
+    tamanho, emojis, histórico recente E o Horário de Brasília atual) para escolher
+    e equilibrar o humor ideal!
     """
     if forced_mode in FORCED_MODE_TO_KEY:
         return FORCED_MODE_TO_KEY[forced_mode]
@@ -125,6 +215,12 @@ def detect_contextual_mood(
         "gamer_deboa": 1.15,
         "revoltado_aff": 1.0,
     }
+
+    # Aplica o ritmo biológico do Horário de Brasília (Manhã / Tarde / Noite / Madrugada)
+    br_ctx = get_brasilia_time_context()
+    for m_key, boost in br_ctx["mood_boosts"].items():
+        if m_key in scores:
+            scores[m_key] += boost
 
     # 1. Sinais de Humor Depressivo / Melancólico / Cansado / Crise
     for kw in [
@@ -345,9 +441,12 @@ def format_telegram_mood_chart(forced_mode: str = "auto") -> tuple:
         ("😤 Revoltado / AFF", pcts.get("revoltado_aff", 6.0)),
     ]
 
+    br_ctx = get_brasilia_time_context()
     lines = [
         "📊 **GRÁFICO DE HUMOR EQUILIBRADO DO CLONE**",
-        "*(Adaptando o humor em tempo real ao jeito que você digita)*\n",
+        "*(Adaptando o humor ao seu texto + Horário de Brasília)*\n",
+        f"🕒 **Horário de Brasília:** `{br_ctx['hora_str']} ({br_ctx['dia_semana']})`",
+        f"🌞 **Ritmo do Dia:** `{br_ctx['periodo']}`",
         f"🧠 **Modo de Inteligência:** `{mode_label}`",
         f"🎭 **Humor na última resposta:** `{ultimo}`\n",
     ]
@@ -387,6 +486,7 @@ def build_dynamic_system_prompt(user_text: str, target_mood: str, mood_bank: Dic
 
     mood_label, mood_directive = MOOD_PROFILES.get(target_mood, MOOD_PROFILES["gamer_deboa"])
     relevant_examples = retrieve_relevant_examples(user_text, target_mood, mood_bank)
+    br_ctx = get_brasilia_time_context()
 
     exemplos_str = "\n\n".join(
         f"Pessoa: {ex['recebido']}\nVocê: {ex['resposta']}" for ex in relevant_examples
@@ -398,6 +498,10 @@ def build_dynamic_system_prompt(user_text: str, target_mood: str, mood_bank: Dic
 
 ## Quem é você
 {resumo.strip()}
+
+## HORÁRIO DE BRASÍLIA ATUAL E SEU RITMO DO DIA: {br_ctx['hora_str']} ({br_ctx['dia_semana']}) — {br_ctx['periodo']}
+{br_ctx['diretriz_horario']}
+- Se for cumprimentar ou se despedir, use a saudação certa para o horário atual de Brasília ({br_ctx['saudacao_natural']}).
 
 ## TOM E HUMOR DESTE MOMENTO DA CONVERSA: {mood_label}
 {mood_directive}
@@ -513,9 +617,12 @@ class CloneContactBot:
             if self.forced_mood == "auto"
             else MOOD_PROFILES.get(FORCED_MODE_TO_KEY.get(self.forced_mood, ""), ("Automático", ""))[0]
         )
+        br_ctx = get_brasilia_time_context()
         text = (
             f"🎛️ **Painel de Controle do Seu Clone**\n\n"
             f"**Status atual:** {status_emoji}\n"
+            f"**Horário de Brasília:** `{br_ctx['hora_str']} ({br_ctx['dia_semana']})`\n"
+            f"**Ritmo do Dia:** `{br_ctx['periodo']}`\n"
             f"**Humor:** `{mood_str}`\n"
             f"**Motor IA:** Híbrido Inteligente (120B + RTX 5070)\n\n"
             f"Clique nos botões abaixo para controlar:"

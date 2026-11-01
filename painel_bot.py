@@ -4,8 +4,25 @@ import os
 import subprocess
 import time
 import tkinter as tk
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageTk
+
+BRASILIA_TZ = timezone(timedelta(hours=-3))
+
+
+def get_brasilia_rhythm_short() -> tuple:
+    now_br = datetime.now(BRASILIA_TZ)
+    h = now_br.hour
+    hora_str = now_br.strftime("%H:%M:%S")
+    if 0 <= h < 6:
+        return hora_str, "🌙 Madrugada (Modo Batma • Mente Ativa & Universo)"
+    elif 6 <= h < 12:
+        return hora_str, "🌅 Manhã (Acordando / Bom diaaa)"
+    elif 12 <= h < 18:
+        return hora_str, "☀️ Tarde (Rotina, Aulas & Resenha)"
+    else:
+        return hora_str, "🌆 Noite (Gameplay, Carinho & Zoeira)"
 
 BASE_DIR = Path(__file__).parent
 ASSETS_DIR = BASE_DIR / "assets"
@@ -637,13 +654,15 @@ def main():
         donut_canvas.create_text(86, 74, text="SCORE", fill="#a1a1aa", font=("Segoe UI", 7, "bold"))
         donut_canvas.create_text(86, 91, text=score_str.replace(" PTS", ""), fill="#facc15", font=("Segoe UI", 11, "bold"))
 
-        # Right side of donut canvas: Benchmark Metrics Telemetry
-        donut_canvas.create_text(172, 26, text="⚡ TELEMETRIA DO BENCHMARK", fill="#e4e4e7", font=("Segoe UI", 8, "bold"), anchor="w")
-        donut_canvas.create_text(172, 48, text=f"• Pontuação: {score_str}", fill="#facc15", font=("Segoe UI", 8, "bold"), anchor="w")
-        donut_canvas.create_text(172, 68, text=f"• Classificação: {rank_str.split('(')[0].strip()}", fill="#4ade80", font=("Segoe UI", 8, "bold"), anchor="w")
-        donut_canvas.create_text(172, 88, text="• Base RAG: 1.840 pares / 462k linhas", fill="#a1a1aa", font=("Segoe UI", 8), anchor="w")
-        donut_canvas.create_text(172, 108, text="• GPU Local: RTX 5070 (Ollama Ativo)", fill="#38bdf8", font=("Segoe UI", 8), anchor="w")
-        donut_canvas.create_text(172, 128, text="• Fidelidade Emocional: 99.4%", fill="#f472b6", font=("Segoe UI", 8, "bold"), anchor="w")
+        # Right side of donut canvas: Benchmark Metrics Telemetry + Horário de Brasília
+        hora_br, ritmo_br = get_brasilia_rhythm_short()
+        donut_canvas.create_text(168, 22, text=f"🕒 BRASÍLIA: {hora_br}", fill="#38bdf8", font=("Segoe UI", 8, "bold"), anchor="w")
+        donut_canvas.create_text(168, 42, text=f"• {ritmo_br[:34]}", fill="#c084fc", font=("Segoe UI", 8, "bold"), anchor="w")
+        donut_canvas.create_text(168, 64, text=f"• Pontuação: {score_str}", fill="#facc15", font=("Segoe UI", 8, "bold"), anchor="w")
+        donut_canvas.create_text(168, 84, text=f"• Classificação: {rank_str.split('(')[0].strip()}", fill="#4ade80", font=("Segoe UI", 8, "bold"), anchor="w")
+        donut_canvas.create_text(168, 104, text="• Base RAG: 1.840 pares / 462k linhas", fill="#a1a1aa", font=("Segoe UI", 8), anchor="w")
+        donut_canvas.create_text(168, 124, text="• GPU Local: RTX 5070 (Ollama Ativo)", fill="#38bdf8", font=("Segoe UI", 8), anchor="w")
+        donut_canvas.create_text(168, 144, text="• Fidelidade Emocional: 99.4%", fill="#f472b6", font=("Segoe UI", 8, "bold"), anchor="w")
 
     # =========================================================================
     # 5. LIVE PHRASE TESTER & BENCHMARK STRESS TEST RUNNER
