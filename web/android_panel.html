@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#09090b">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Painel Do Meu Clone • Android</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #09090b;
+      --card: #121217;
+      --card-hover: #18181f;
+      --border: #27272f;
+      --border-glow: rgba(236, 72, 153, 0.3);
+      --pink: #ec4899;
+      --pink-glow: rgba(236, 72, 153, 0.4);
+      --purple: #a855f7;
+      --green: #22c55e;
+      --green-glow: rgba(34, 197, 94, 0.35);
+      --red: #ef4444;
+      --yellow: #eab308;
+      --cyan: #06b6d4;
+      --text: #f4f4f6;
+      --text-muted: #9ca3af;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      min-height: 100vh;
+      padding: 16px 14px 40px;
+      overflow-x: hidden;
+    }
+    .header-card {
+      background: linear-gradient(135deg, rgba(236, 72, 153, 0.12), rgba(168, 85, 247, 0.08)), var(--card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      margin-bottom: 14px;
+    }
+    .avatar-wrapper {
+      position: relative;
+      width: 64px;
+      height: 64px;
+      flex-shrink: 0;
+    }
+    .avatar-img {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 2.5px solid var(--pink);
+      box-shadow: 0 0 16px var(--pink-glow);
+    }
+    .online-dot {
+      position: absolute;
+      bottom: 2px;
+      right: 2px;
+      width: 14px;
+      height: 14px;
+      background: var(--green);
+      border-radius: 50%;
+      border: 2px solid var(--card);
+      box-shadow: 0 0 10px var(--green);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.18); opacity: 0.8; }
+    }
+    .header-info { flex: 1; min-width: 0; }
+    .header-title { font-size: 1.05rem; font-weight: 800; letter-spacing: -0.3px; }
+    .header-sub { font-size: 0.76rem; color: var(--text-muted); margin-top: 2px; }
+    .clock-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      background: rgba(255,255,255,0.06);
+      padding: 3px 8px;
+      border-radius: 12px;
+      margin-top: 6px;
+      color: #cbd5e1;
+    }
+    .master-btn {
+      width: 100%;
+      padding: 15px;
+      border-radius: 16px;
+      font-size: 1rem;
+      font-weight: 800;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+      margin-bottom: 14px;
+    }
+    .master-on {
+      background: linear-gradient(135deg, #22c55e, #16a34a);
+      color: #fff;
+      box-shadow: 0 6px 24px var(--green-glow);
+    }
+    .master-off {
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+      color: #fff;
+      box-shadow: 0 6px 24px rgba(239, 68, 68, 0.35);
+    }
+    .master-btn:active { transform: scale(0.98); }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 14px;
+      margin-bottom: 14px;
+    }
+    .card-title {
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .switch-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    .switch-row:last-child { border-bottom: none; }
+    .switch-label { font-size: 0.88rem; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+    .switch-sub { font-size: 0.72rem; color: var(--text-muted); margin-top: 2px; }
+    .toggle {
+      position: relative;
+      display: inline-block;
+      width: 46px;
+      height: 26px;
+    }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-color: #27272f;
+      transition: .3s;
+      border-radius: 26px;
+    }
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 20px;
+      width: 20px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: .3s;
+      border-radius: 50%;
+    }
+    input:checked + .slider { background: linear-gradient(135deg, var(--pink), var(--purple)); }
+    input:checked + .slider:before { transform: translateX(20px); }
+    .mood-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+    .mood-btn {
+      background: #181820;
+      border: 1px solid var(--border);
+      color: #e2e8f0;
+      padding: 10px 8px;
+      border-radius: 12px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+    .mood-btn.active {
+      background: linear-gradient(135deg, rgba(236, 72, 153, 0.25), rgba(168, 85, 247, 0.2));
+      border-color: var(--pink);
+      color: #fff;
+      box-shadow: 0 0 12px rgba(236, 72, 153, 0.3);
+    }
+    .action-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+    .action-btn {
+      background: #181822;
+      border: 1px solid var(--border);
+      color: #fff;
+      padding: 12px 10px;
+      border-radius: 14px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.2s ease;
+      text-align: center;
+    }
+    .action-btn span:first-child { font-size: 1.25rem; }
+    .action-btn:active { transform: scale(0.96); background: #222230; }
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+    .stat-pill {
+      background: #15151c;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 6px;
+      text-align: center;
+    }
+    .stat-val { font-size: 1.15rem; font-weight: 800; font-family: 'JetBrains Mono', monospace; color: var(--pink); }
+    .stat-lbl { font-size: 0.65rem; color: var(--text-muted); margin-top: 2px; text-transform: uppercase; }
+    .feed-container {
+      max-height: 220px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding-right: 4px;
+    }
+    .feed-msg {
+      padding: 8px 12px;
+      border-radius: 12px;
+      font-size: 0.8rem;
+      line-height: 1.35;
+      position: relative;
+    }
+    .feed-lil {
+      background: rgba(236, 72, 153, 0.14);
+      border: 1px solid rgba(236, 72, 153, 0.3);
+      align-self: flex-start;
+      border-bottom-left-radius: 4px;
+    }
+    .feed-clone {
+      background: rgba(34, 197, 94, 0.12);
+      border: 1px solid rgba(34, 197, 94, 0.28);
+      align-self: flex-end;
+      border-bottom-right-radius: 4px;
+    }
+    .feed-time {
+      font-size: 0.62rem;
+      color: var(--text-muted);
+      margin-top: 4px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .tg-open-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      background: #0088cc;
+      color: #fff;
+      padding: 12px;
+      border-radius: 14px;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 0.88rem;
+      margin-top: 6px;
+      box-shadow: 0 4px 16px rgba(0, 136, 204, 0.35);
+    }
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: #181822;
+      color: #fff;
+      border: 1px solid var(--pink);
+      padding: 10px 18px;
+      border-radius: 30px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+      transition: transform 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+      z-index: 999;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      pointer-events: none;
+    }
+    .toast.show { transform: translateX(-50%) translateY(0); }
+  </style>
+</head>
+<body>
+
+  <!-- TOP HEADER -->
+  <div class="header-card">
+    <div class="avatar-wrapper">
+      <img src="https://raw.githubusercontent.com/filipao15/lipe-s-clone/main/assets/foto_1.png" alt="Clone" class="avatar-img" id="avatarImg" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'64\' height=\'64\'><rect width=\'64\' height=\'64\' fill=\'%23ec4899\'/><text x=\'32\' y=\'38\' font-size=\'24\' fill=\'white\' text-anchor=\'middle\'>lil</text></svg>'">
+      <div class="online-dot" id="onlineDot"></div>
+    </div>
+    <div class="header-info">
+      <div class="header-title">PAINEL DO MEU CLONE</div>
+      <div class="header-sub" id="statusSub">🟢 Online • Respondendo na Hora</div>
+      <div class="clock-badge">
+        <span id="clockTxt">--:--:--</span>
+        <span>•</span>
+        <span id="rhythmTxt">Horário de Brasília</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- MASTER POWER BUTTON -->
+  <button class="master-btn master-on" id="masterBtn" onclick="toggleMasterPower()">
+    <span>🟢</span> <span id="masterBtnTxt">CLONE LIGADO (ON)</span>
+  </button>
+
+  <!-- SWITCHES -->
+  <div class="card">
+    <div class="card-title">
+      <span>Autonomia do Clone</span>
+      <span style="font-size: 0.7rem; color: var(--pink)">Tempo Real</span>
+    </div>
+
+    <div class="switch-row">
+      <div>
+        <div class="switch-label">💬 Iniciativa Própria</div>
+        <div class="switch-sub">Mandar mensagens sozinho se você não responder</div>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="proactiveSwitch" onchange="updateSwitches()">
+        <span class="slider"></span>
+      </label>
+    </div>
+
+    <div class="switch-row">
+      <div>
+        <div class="switch-label">🖼️ Envio de Imagens</div>
+        <div class="switch-sub">Astrofísica, Paramore, RADWIMPS, Sufjan</div>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="imagesSwitch" onchange="updateSwitches()">
+        <span class="slider"></span>
+      </label>
+    </div>
+  </div>
+
+  <!-- QUICK ACTIONS -->
+  <div class="card">
+    <div class="card-title">Ações Rápidas</div>
+    <div class="action-grid">
+      <button class="action-btn" onclick="sendAction('proactive_now')">
+        <span>⚡</span>
+        <span>Puxar Assunto</span>
+      </button>
+      <button class="action-btn" onclick="sendAction('image_now')">
+        <span>🖼️</span>
+        <span>Mandar Imagem</span>
+      </button>
+      <button class="action-btn" onclick="sendAction('reset_memory')">
+        <span>🧹</span>
+        <span>Limpar Memória</span>
+      </button>
+      <a href="https://t.me/lilkja_clone_876_bot" target="_blank" class="action-btn" style="text-decoration:none">
+        <span>💬</span>
+        <span>Abrir Telegram</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- MOOD SELECTOR -->
+  <div class="card">
+    <div class="card-title">
+      <span>Modo de Humor Atual</span>
+      <span id="currentMoodBadge" style="color: var(--pink); font-size: 0.72rem;">🧠 Automático</span>
+    </div>
+    <div class="mood-grid">
+      <button class="mood-btn active" data-mood="auto" onclick="setMood('auto')">🧠 Automático</button>
+      <button class="mood-btn" data-mood="empolgado" onclick="setMood('empolgado')">🥰 Bem Afetivo</button>
+      <button class="mood-btn" data-mood="zoeira" onclick="setMood('zoeira')">😂 Zoeira (SKAK)</button>
+      <button class="mood-btn" data-mood="reflexivo" onclick="setMood('reflexivo')">🌌 Astrofísica</button>
+      <button class="mood-btn" data-mood="gamer" onclick="setMood('gamer')">🎮 Gamer Bro</button>
+      <button class="mood-btn" data-mood="chocado" onclick="setMood('chocado')">😱 Fofoca / OXE</button>
+      <button class="mood-btn" data-mood="depressivo" onclick="setMood('depressivo')">🌧️ Depressivo</button>
+      <button class="mood-btn" data-mood="revoltado" onclick="setMood('revoltado')">😤 Revoltado</button>
+    </div>
+  </div>
+
+  <!-- STATS -->
+  <div class="card">
+    <div class="card-title">Telemetria ao Vivo</div>
+    <div class="stats-row">
+      <div class="stat-pill">
+        <div class="stat-val" id="statRec">0</div>
+        <div class="stat-lbl">Recebidas</div>
+      </div>
+      <div class="stat-pill">
+        <div class="stat-val" id="statEnv">0</div>
+        <div class="stat-lbl">Enviadas</div>
+      </div>
+      <div class="stat-pill">
+        <div class="stat-val" id="statPro">0</div>
+        <div class="stat-lbl">Proativas</div>
+      </div>
+    </div>
+    <div class="stats-row" style="margin-top: 8px;">
+      <div class="stat-pill">
+        <div class="stat-val" id="statImg" style="color: var(--cyan)">0</div>
+        <div class="stat-lbl">Imagens</div>
+      </div>
+      <div class="stat-pill">
+        <div class="stat-val" id="statAud" style="color: var(--purple)">0</div>
+        <div class="stat-lbl">Áudios</div>
+      </div>
+      <div class="stat-pill">
+        <div class="stat-val" id="statYt" style="color: var(--yellow)">0</div>
+        <div class="stat-lbl">YouTube</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LIVE FEED -->
+  <div class="card">
+    <div class="card-title">
+      <span>Feed da Conversa</span>
+      <span style="font-size: 0.68rem; color: var(--text-muted)">Telegram ao vivo</span>
+    </div>
+    <div class="feed-container" id="feedContainer">
+      <div style="font-size: 0.75rem; color: var(--text-muted); text-align: center; padding: 12px;">Carregando mensagens recentes...</div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast">✨ Ação executada com sucesso!</div>
+
+  <script>
+    let currentState = {
+      enabled: true,
+      proactive_enabled: true,
+      images_enabled: true,
+      forced_mood: 'auto'
+    };
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.innerText = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 2400);
+    }
+
+    async function pollStatus() {
+      try {
+        const res = await fetch('/api/status', { cache: 'no-store' });
+        if (!res.ok) throw new Error('Status error');
+        const data = await res.json();
+        renderStatus(data);
+      } catch (err) {
+        document.getElementById('onlineDot').style.background = '#ef4444';
+        document.getElementById('onlineDot').style.boxShadow = '0 0 10px #ef4444';
+        document.getElementById('statusSub').innerText = '🔴 Desconectado / PC Suspenso';
+      }
+    }
+
+    function renderStatus(data) {
+      currentState.enabled = !!data.enabled;
+      currentState.proactive_enabled = !!data.proactive_enabled;
+      currentState.images_enabled = !!data.images_enabled;
+      currentState.forced_mood = data.forced_mood || 'auto';
+
+      // Header & Status
+      const isOnline = (data.online && (Date.now()/1000 - (data.heartbeat || 0)) < 15);
+      const dot = document.getElementById('onlineDot');
+      const sub = document.getElementById('statusSub');
+      if (isOnline && data.enabled) {
+        dot.style.background = '#22c55e';
+        dot.style.boxShadow = '0 0 10px #22c55e';
+        sub.innerText = '🟢 Online • Respondendo na Hora';
+      } else if (isOnline && !data.enabled) {
+        dot.style.background = '#eab308';
+        dot.style.boxShadow = '0 0 10px #eab308';
+        sub.innerText = '⏸️ Online • Clone Pausado (OFF)';
+      } else {
+        dot.style.background = '#ef4444';
+        dot.style.boxShadow = '0 0 10px #ef4444';
+        sub.innerText = '🔴 Desligado';
+      }
+
+      // Master button
+      const mBtn = document.getElementById('masterBtn');
+      const mTxt = document.getElementById('masterBtnTxt');
+      if (data.enabled) {
+        mBtn.className = 'master-btn master-on';
+        mTxt.innerText = 'CLONE LIGADO (ON)';
+      } else {
+        mBtn.className = 'master-btn master-off';
+        mTxt.innerText = 'CLONE DESLIGADO (OFF)';
+      }
+
+      // Clock & Rhythm
+      document.getElementById('clockTxt').innerText = data.hora || '--:--';
+      document.getElementById('rhythmTxt').innerText = data.periodo || 'Horário de Brasília';
+
+      // Switches
+      document.getElementById('proactiveSwitch').checked = !!data.proactive_enabled;
+      document.getElementById('imagesSwitch').checked = !!data.images_enabled;
+
+      // Mood
+      const moodLabels = {
+        auto: '🧠 Automático', empolgado: '🥰 Bem Afetivo', zoeira: '😂 Zoeira',
+        reflexivo: '🌌 Astrofísica', gamer: '🎮 Gamer Bro', chocado: '😱 Fofoca',
+        depressivo: '🌧️ Depressivo', revoltado: '😤 Revoltado'
+      };
+      document.getElementById('currentMoodBadge').innerText = moodLabels[data.forced_mood] || data.forced_mood;
+      document.querySelectorAll('.mood-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.mood === data.forced_mood);
+      });
+
+      // Stats
+      if (data.stats) {
+        document.getElementById('statRec').innerText = data.stats.msgs_recebidas || 0;
+        document.getElementById('statEnv').innerText = data.stats.msgs_enviadas || 0;
+        document.getElementById('statPro').innerText = data.stats.proativas || 0;
+        document.getElementById('statImg').innerText = data.stats.imagens || 0;
+        document.getElementById('statAud').innerText = data.stats.audios || 0;
+        document.getElementById('statYt').innerText = data.stats.youtube || 0;
+      }
+
+      // Feed
+      if (data.ultimas && data.ultimas.length > 0) {
+        const feed = document.getElementById('feedContainer');
+        feed.innerHTML = data.ultimas.slice(-8).map(m => {
+          const isLil = (m.de === 'lil' || m.de === 'user');
+          const cls = isLil ? 'feed-lil' : 'feed-clone';
+          const author = isLil ? 'lil' : 'Clone';
+          return `<div class="feed-msg ${cls}">
+            <div><strong>${author}:</strong> ${escapeHtml(m.texto || '')}</div>
+            <div class="feed-time">${m.hora || ''} • ${m.tipo || 'msg'}</div>
+          </div>`;
+        }).join('');
+      }
+    }
+
+    function escapeHtml(s) {
+      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    async function sendControl(patch) {
+      Object.assign(currentState, patch);
+      try {
+        const res = await fetch('/api/control', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(currentState)
+        });
+        if (res.ok) {
+          const data = await res.json();
+          renderStatus(data);
+          showToast('Configuração atualizada!');
+        }
+      } catch (err) {
+        showToast('⚠️ Erro ao comunicar com o PC');
+      }
+    }
+
+    function toggleMasterPower() {
+      sendControl({ enabled: !currentState.enabled });
+    }
+
+    function updateSwitches() {
+      sendControl({
+        proactive_enabled: document.getElementById('proactiveSwitch').checked,
+        images_enabled: document.getElementById('imagesSwitch').checked
+      });
+    }
+
+    function setMood(m) {
+      sendControl({ forced_mood: m });
+    }
+
+    async function sendAction(act) {
+      try {
+        const res = await fetch('/api/action', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: act })
+        });
+        if (res.ok) {
+          showToast('⚡ Ação disparada com sucesso!');
+        }
+      } catch (e) {
+        showToast('⚠️ Erro ao disparar ação');
+      }
+    }
+
+    pollStatus();
+    setInterval(pollStatus, 1500);
+  </script>
+</body>
+</html>

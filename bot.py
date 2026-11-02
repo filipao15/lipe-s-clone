@@ -1,8 +1,10 @@
 import asyncio
+import io
 import json
 import os
 import random
 import re
+import socket
 import subprocess
 import sys
 import time
@@ -552,6 +554,7 @@ def build_dynamic_system_prompt(user_text: str, target_mood: str, mood_bank: Dic
 
 ## Regras absolutas
 {regras_str}
+- Os exemplos abaixo vêm de conversas com OUTRAS pessoas. NUNCA chame a pessoa atual pelos nomes que aparecem neles (Murilo, Muri, Karol, Vicky, Vendell).
 
 ## Exemplos reais seus nesse mesmo tom e assunto
 {exemplos_str}
@@ -599,7 +602,60 @@ def clean_vei_style(text: str) -> str:
     text = re.sub(r",\s*\bv[ée]i\b\s*,", " vei ", text, flags=re.IGNORECASE)
     text = re.sub(r",\s*\bv[ée]i\b", " vei", text, flags=re.IGNORECASE)
     text = re.sub(r"\bv[ée]i\b", "vei", text, flags=re.IGNORECASE)
+    # Nunca chama a pessoa pelo nome de quem aparece nos exemplos do WhatsApp (ex: "Oi Muri")
+    text = re.sub(
+        r",?\s*\b(Murilo|Muri|Karol|Vicky|Vendell)\b",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(r"[ \t]{2,}", " ", text).strip()
     return text
+
+
+# Assuntos que o Filipe curte, com fonte de imagem livre (sem chave de API)
+IMAGE_TOPICS: List[Dict[str, str]] = [
+    {"tema": "astro", "fonte": "nasa", "busca": "black hole", "nome": "buraco negro"},
+    {"tema": "astro", "fonte": "nasa", "busca": "james webb galaxy", "nome": "galáxia do James Webb"},
+    {"tema": "astro", "fonte": "nasa", "busca": "nebula", "nome": "nebulosa"},
+    {"tema": "astro", "fonte": "nasa", "busca": "supernova", "nome": "supernova"},
+    {"tema": "astro", "fonte": "nasa", "busca": "deep field", "nome": "campo profundo do universo"},
+    {"tema": "astro", "fonte": "nasa", "busca": "pillars of creation", "nome": "Pilares da Criação"},
+    {"tema": "musica", "fonte": "wiki", "busca": "RADWIMPS", "nome": "RADWIMPS"},
+    {"tema": "musica", "fonte": "wiki", "busca": "Paramore", "nome": "Paramore"},
+    {"tema": "musica", "fonte": "wiki", "busca": "Hayley_Williams", "nome": "Hayley Williams"},
+    {"tema": "musica", "fonte": "wiki", "busca": "Sufjan_Stevens", "nome": "Sufjan Stevens"},
+    {"tema": "musica", "fonte": "wiki", "busca": "Yojiro_Noda", "nome": "Yojiro Noda"},
+]
+
+WEB_HEADERS = {"User-Agent": "LipeCloneBot/1.0 (https://github.com/filipao15/lipe-s-clone)"}
+
+# Arquivos compartilhados com o Painel do PC e o App do Android
+CONTROL_PATH = BASE_DIR / "data" / "control.json"
+STATUS_PATH = BASE_DIR / "data" / "status.json"
+ACTIONS_DIR = BASE_DIR / "data" / "actions"
+OWNER_CHAT_ID = int(os.getenv("OWNER_CHAT_ID", "5377524441"))
+WEBAPP_URL = os.getenv("WEBAPP_URL", "https://filipao15.github.io/lipe-s-clone/")
+VALID_MOODS = {"auto", *FORCED_MODE_TO_KEY.keys()}
+IMAGE_CHANCE = float(os.getenv("IMAGE_CHANCE", "0.4"))
+
+
+def get_local_ip() -> str:
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
+
+
+def write_json_atomic(path: Path, data: Dict[str, Any]):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(tmp, path)
 
 
 class CloneContactBot:
@@ -619,14 +675,26 @@ class CloneContactBot:
         self.client = TelegramClient(load_unlocked_session(SESSION_FILE), API_ID, API_HASH)
         self.http_client = httpx.AsyncClient(timeout=20.0)
         self.mood_bank = load_mood_bank()
+        self.local_ip = get_local_ip()
 
         self.enabled: bool = True
         self.proactive_enabled: bool = True
+        self.images_enabled: bool = True
         self.forced_mood: str = "auto"
         self.recent_moods: Dict[int, Deque[str]] = {}
         self.pending_buffers: Dict[int, List[str]] = {}
         self.debounce_tasks: Dict[int, asyncio.Task] = {}
         self.histories: Dict[str, List[Dict[str, str]]] = self._load_histories()
+
+        # Estado compartilhado com o Painel (PC) e o App do Android
+        self.stats: Dict[str, int] = {
+            "msgs_recebidas": 0, "msgs_enviadas": 0, "proativas": 0,
+            "imagens": 0, "audios": 0, "youtube": 0,
+        }
+        self.feed: Deque[Dict[str, str]] = deque(maxlen=15)
+        self.control_updated_at: float = 0.0
+        self.recent_image_topics: Deque[str] = deque(maxlen=5)
+        self._load_control()
 
         # Controle de iniciativa própria (mensagens independentes caso o usuário não responda)
         now = time.time() - 25.0
@@ -639,6 +707,203 @@ class CloneContactBot:
                 self.proactive_stage[cid] = 0
             except Exception:
                 pass
+
+    def _load_control(self):
+        if CONTROL_PATH.exists():
+            try:
+                data = json.loads(CONTROL_PATH.read_text(encoding="utf-8-sig"))
+                self.enabled = bool(data.get("enabled", self.enabled))
+                self.proactive_enabled = bool(data.get("proactive_enabled", self.proactive_enabled))
+                self.images_enabled = bool(data.get("images_enabled", self.images_enabled))
+                f_mood = str(data.get("forced_mood", self.forced_mood))
+                if f_mood in VALID_MOODS:
+                    self.forced_mood = f_mood
+                self.control_updated_at = float(data.get("updated_at", time.time()))
+                return
+            except Exception as e:
+                print(f"⚠️ Erro ao carregar control.json: {e}")
+        self._save_control()
+
+    def _save_control(self):
+        self.control_updated_at = time.time()
+        data = {
+            "enabled": self.enabled,
+            "proactive_enabled": self.proactive_enabled,
+            "images_enabled": self.images_enabled,
+            "forced_mood": self.forced_mood,
+            "updated_at": self.control_updated_at,
+        }
+        write_json_atomic(CONTROL_PATH, data)
+
+    def _sync_control(self):
+        if CONTROL_PATH.exists():
+            try:
+                mtime = CONTROL_PATH.stat().st_mtime
+                if mtime > self.control_updated_at:
+                    self._load_control()
+            except Exception:
+                pass
+
+    def _record_feed(self, de: str, texto: str, tipo: str = "texto"):
+        now_str = datetime.now(BRASILIA_TZ).strftime("%H:%M")
+        self.feed.append({"hora": now_str, "de": de, "texto": texto[:120], "tipo": tipo})
+        self._dump_status()
+
+    def _dump_status(self):
+        br_ctx = get_brasilia_time_context()
+        data = {
+            "online": True,
+            "pid": os.getpid(),
+            "heartbeat": time.time(),
+            "enabled": self.enabled,
+            "proactive_enabled": self.proactive_enabled,
+            "images_enabled": self.images_enabled,
+            "forced_mood": self.forced_mood,
+            "periodo": br_ctx["periodo"],
+            "hora": br_ctx["hora_str"],
+            "local_ip": self.local_ip,
+            "android_url": f"http://{self.local_ip}:8765",
+            "stats": self.stats,
+            "ultimas": list(self.feed),
+        }
+        try:
+            write_json_atomic(STATUS_PATH, data)
+        except Exception:
+            pass
+
+    async def _process_actions(self):
+        if not ACTIONS_DIR.exists():
+            return
+        for act_file in list(ACTIONS_DIR.glob("*.json")):
+            try:
+                raw = act_file.read_text(encoding="utf-8")
+                act = json.loads(raw).get("action", "")
+                act_file.unlink(missing_ok=True)
+                if act == "proactive_now":
+                    stage = self.proactive_stage.get(OWNER_CHAT_ID, 0) + 1
+                    self.proactive_stage[OWNER_CHAT_ID] = stage
+                    self.last_interaction[OWNER_CHAT_ID] = time.time()
+                    await self.send_proactive_message(OWNER_CHAT_ID, max(2, stage))
+                elif act == "image_now":
+                    self.last_interaction[OWNER_CHAT_ID] = time.time()
+                    await self.send_autonomous_image(OWNER_CHAT_ID)
+                elif act == "reset_memory":
+                    self.histories.pop(str(OWNER_CHAT_ID), None)
+                    self._save_histories()
+                    self._record_feed("sistema", "Memória limpa via painel", "sistema")
+            except Exception as e:
+                print(f"⚠️ Erro ao processar ação {act_file.name}: {e}")
+
+    async def fetch_topic_image(self) -> Optional[Tuple[str, str, str]]:
+        """Busca uma imagem real de um assunto que o Filipe gosta (NASA ou Wikipedia)."""
+        available = [t for t in IMAGE_TOPICS if t["busca"] not in self.recent_image_topics]
+        if not available:
+            self.recent_image_topics.clear()
+            available = IMAGE_TOPICS
+        topic = random.choice(available)
+        self.recent_image_topics.append(topic["busca"])
+
+        try:
+            if topic["fonte"] == "nasa":
+                r = await self.http_client.get(
+                    "https://images-api.nasa.gov/search",
+                    params={"q": topic["busca"], "media_type": "image"},
+                    headers=WEB_HEADERS,
+                    timeout=9.0,
+                )
+                if r.status_code == 200:
+                    items = r.json().get("collection", {}).get("items", [])
+                    if items:
+                        item = random.choice(items[:15])
+                        links = item.get("links", [])
+                        href = links[0].get("href") if links else None
+                        data_arr = item.get("data", [{}])
+                        title = data_arr[0].get("title", topic["nome"])
+                        if href:
+                            return (href, title, topic["nome"])
+            elif topic["fonte"] == "wiki":
+                r = await self.http_client.get(
+                    f"https://en.wikipedia.org/api/rest_v1/page/summary/{topic['busca']}",
+                    headers=WEB_HEADERS,
+                    timeout=8.0,
+                )
+                if r.status_code == 200:
+                    data = r.json()
+                    img = (data.get("originalimage") or data.get("thumbnail") or {}).get("source")
+                    title = data.get("title", topic["nome"])
+                    if img:
+                        return (img, title, topic["nome"])
+        except Exception as e:
+            print(f"⚠️ Erro ao buscar imagem ({topic['busca']}): {e}")
+        return None
+
+    async def send_autonomous_image(self, chat_id: int) -> bool:
+        """Envia foto de Astrofísica, Paramore, RADWIMPS ou Sufjan Stevens por conta própria!"""
+        img_info = await self.fetch_topic_image()
+        if not img_info:
+            return False
+        img_url, title, topic_name = img_info
+
+        captions_map = {
+            "buraco negro": [
+                f"Olha essa foto de buraco negro que absurda vei\n{title}\nFico brisando demais nisso",
+                f"Tava vendo essa imagem de buraco negro aqui lil\nBizarro demais imaginar a singularidade lá dentro",
+            ],
+            "galáxia do James Webb": [
+                f"O James Webb capturou essa imagem aqui vei\n{title}\nUma das paradas mais lindas do cosmos ❤️",
+                f"Olha essa galáxia primordial que o James Webb achou lil\nDesafia tudo que a gente achava que sabia",
+            ],
+            "nebulosa": [
+                f"Olha as cores dessa nebulosa vei\n{title}\nParece até pintura mano ❤️",
+            ],
+            "supernova": [
+                f"Remanescente de supernova vei\n{title}\nA explosão que espalhou os elementos pelo universo",
+            ],
+            "campo profundo do universo": [
+                f"Cada pontinho brilhante aqui é uma galáxia inteira vei\n{title}\nO universo é grande demais bicho",
+            ],
+            "Pilares da Criação": [
+                f"Pilares da Criação vei ❤️\n{title}\nUma das fotos mais icônicas da história da astronomia",
+            ],
+            "RADWIMPS": [
+                f"Tava ouvindo RADWIMPS agora e lembrei dessa foto aqui vei ❤️\nAmo demais a vibe das músicas deles",
+                f"RADWIMPS vei ❤️\nO Yojiro Noda coloca uma emoção surreal na voz",
+            ],
+            "Paramore": [
+                f"Olha eles aí vei ❤️\nParamore é minha banda favorita disparado\nO controle vocal da Hayley é de outro planeta",
+                f"Tava escutando Paramore aqui lil ❤️\nBate uma energia absurda",
+            ],
+            "Hayley Williams": [
+                f"A Hayley Williams vei ❤️\nA técnica vocal e a presença dela ao vivo são absurdas",
+                f"Maior referência de controle vocal que existe pra mim ❤️",
+            ],
+            "Sufjan Stevens": [
+                f"Sufjan Stevens vei ❤️\nA voz dele no falsete e o violão passam uma paz inacreditável",
+                f"Tava ouvindo Sufjan Stevens aqui lil\nPerfeito demais pra relaxar",
+            ],
+            "Yojiro Noda": [
+                f"O Yojiro Noda do RADWIMPS vei ❤️\nO timbre e a sensibilidade desse cara cantando são únicos",
+            ],
+        }
+        cand_list = captions_map.get(topic_name, [f"Olha isso vei ❤️\n{title}"])
+        caption = random.choice(cand_list)
+
+        try:
+            r_img = await self.http_client.get(img_url, timeout=14.0)
+            if r_img.status_code == 200:
+                bio = io.BytesIO(r_img.content)
+                bio.name = "foto.jpg"
+                async with self.client.action(chat_id, "photo"):
+                    await asyncio.sleep(random.uniform(0.8, 1.8))
+                await self.client.send_file(chat_id, file=bio, caption=caption)
+                self.stats["imagens"] += 1
+                self.stats["msgs_enviadas"] += 1
+                self._record_feed("clone", f"🖼️ {topic_name}: {title}", "imagem")
+                print(f"🖼️ [FOTO ENVIADA #{self.stats['imagens']}] -> [{chat_id}]: {topic_name} ({title})")
+                return True
+        except Exception as e:
+            print(f"⚠️ Erro ao enviar foto para chat {chat_id}: {e}")
+        return False
 
     def _load_histories(self) -> Dict[str, List[Dict[str, str]]]:
         if CHAT_HISTORY_PATH.exists():
@@ -668,9 +933,18 @@ class CloneContactBot:
             self.histories[key] = hist[-16:]
         self._save_histories()
 
+        # Atualiza estatísticas e feed em tempo real para o Painel PC e Android
+        if role == "user":
+            self.stats["msgs_recebidas"] += 1
+            self._record_feed("lil", text, "texto")
+        elif role == "assistant":
+            self.stats["msgs_enviadas"] += 1
+            self._record_feed("clone", text, "texto")
+
     def _build_control_panel_markup(self):
-        status_emoji = "🟢 LIGADO (Respondendo na Hora)" if self.enabled else "🔴 DESLIGADO (Pausado)"
-        proactive_emoji = "🟢 ATIVA (Manda msg sozinho)" if self.proactive_enabled else "🔴 PAUSADA"
+        status_emoji = "🟢 LIGADO (Respondendo)" if self.enabled else "🔴 DESLIGADO (Pausado)"
+        proactive_emoji = "🟢 ATIVA" if self.proactive_enabled else "🔴 PAUSADA"
+        images_emoji = "🟢 ATIVAS" if self.images_enabled else "🔴 PAUSADAS"
         mood_str = (
             "🧠 Automático Inteligente"
             if self.forced_mood == "auto"
@@ -681,10 +955,11 @@ class CloneContactBot:
             f"🎛️ **Painel de Controle do Seu Clone**\n\n"
             f"**Status atual:** {status_emoji}\n"
             f"**Iniciativa Própria:** {proactive_emoji}\n"
+            f"**Envio de Imagens:** {images_emoji} (Astro/Músicas)\n"
             f"**Horário de Brasília:** `{br_ctx['hora_str']} ({br_ctx['dia_semana']})`\n"
             f"**Ritmo do Dia:** `{br_ctx['periodo']}`\n"
             f"**Humor:** `{mood_str}`\n"
-            f"**Velocidade:** ⚡ Resposta Instantânea (Na Hora)\n\n"
+            f"**📱 App Android:** `http://{self.local_ip}:8765`\n\n"
             f"Clique nos botões abaixo para controlar:"
         )
         buttons = [
@@ -697,10 +972,20 @@ class CloneContactBot:
                     f"💬 Iniciativa: {'ON' if self.proactive_enabled else 'OFF'}",
                     b"clone_proactive_toggle",
                 ),
-                Button.inline("⚡ Puxar Assunto Agora", b"clone_proactive_now"),
+                Button.inline(
+                    f"🖼️ Imagens: {'ON' if self.images_enabled else 'OFF'}",
+                    b"clone_images_toggle",
+                ),
+            ],
+            [
+                Button.inline("⚡ Puxar Assunto", b"clone_proactive_now"),
+                Button.inline("🖼️ Mandar Imagem", b"clone_image_now"),
             ],
             [
                 Button.inline("📊 Gráfico de Humor", b"clone_mood"),
+                Button.inline("📱 Painel Android", b"clone_android"),
+            ],
+            [
                 Button.inline("🧹 Limpar Memória", b"clone_reset"),
             ],
         ]
@@ -944,8 +1229,9 @@ class CloneContactBot:
                             if transcript:
                                 if is_voice:
                                     return (
-                                        f"[Mandou um áudio de voz pra você falando/cantando: \"{transcript}\" "
-                                        f"— Você OUVIU esse áudio! Responda comentando diretamente o que ouviu no áudio!]"
+                                        f"[Mandou um áudio de voz falando: \"{transcript}\" "
+                                        f"— Você OUVIU esse áudio. Responda ao que a pessoa DISSE, como numa conversa normal. "
+                                        f"Só comente sobre voz/timbre/canto se ela estiver claramente CANTANDO uma música.]"
                                     )
                                 kind_label = "Vídeo/Música" if (is_video or is_audio) else "Áudio"
                                 if meta_str:
@@ -962,7 +1248,7 @@ class CloneContactBot:
         if meta_str:
             return f"[Vídeo/Música enviado: {meta_str} — Você ouviu, comente sobre a música/vídeo!]"
         if is_voice or is_audio:
-            return "[Mandou um áudio de voz / cantando pra você — Você ouviu o áudio! Comente sobre a voz/música com carinho!]"
+            return "[Mandou um áudio, mas não deu pra entender o que foi dito — peça de boa pra mandar de novo ou escrever.]"
         return ""
 
     async def process_debounced_reply(self, chat_id: int, contact_name: str):
@@ -1121,22 +1407,180 @@ class CloneContactBot:
             await self.client.send_message(chat_id, bubble)
             print(f"💬 [INICIATIVA PRÓPRIA #{stage} | {mood_title}] -> [{chat_id}]: {bubble}")
 
+    async def start_android_server(self, port: int = 8765):
+        """Servidor Web ultraleve para o Painel de Controle no Android e Navegador."""
+        web_file = BASE_DIR / "web" / "android_panel.html"
+
+        async def handle_request(reader, writer):
+            try:
+                line = await reader.readline()
+                if not line:
+                    writer.close()
+                    return
+                parts = line.decode("utf-8", "ignore").strip().split()
+                if len(parts) < 2:
+                    writer.close()
+                    return
+                method, path = parts[0], parts[1]
+
+                headers = {}
+                content_length = 0
+                while True:
+                    hdr = await reader.readline()
+                    if not hdr or hdr == b"\r\n":
+                        break
+                    hdr_str = hdr.decode("utf-8", "ignore").strip()
+                    if ":" in hdr_str:
+                        k, v = hdr_str.split(":", 1)
+                        headers[k.strip().lower()] = v.strip()
+                if "content-length" in headers:
+                    try:
+                        content_length = int(headers["content-length"])
+                    except ValueError:
+                        pass
+
+                body_bytes = b""
+                if content_length > 0:
+                    body_bytes = await reader.readexactly(content_length)
+
+                cors_headers = (
+                    b"Access-Control-Allow-Origin: *\r\n"
+                    b"Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
+                    b"Access-Control-Allow-Headers: Content-Type\r\n"
+                )
+
+                if method == "OPTIONS":
+                    writer.write(b"HTTP/1.1 204 No Content\r\n" + cors_headers + b"Connection: close\r\n\r\n")
+                    await writer.drain()
+                    writer.close()
+                    return
+
+                if path.startswith("/api/status") and method == "GET":
+                    self._sync_control()
+                    br_ctx = get_brasilia_time_context()
+                    payload = {
+                        "online": True,
+                        "pid": os.getpid(),
+                        "heartbeat": time.time(),
+                        "enabled": self.enabled,
+                        "proactive_enabled": self.proactive_enabled,
+                        "images_enabled": self.images_enabled,
+                        "forced_mood": self.forced_mood,
+                        "periodo": br_ctx["periodo"],
+                        "hora": br_ctx["hora_str"],
+                        "local_ip": self.local_ip,
+                        "android_url": f"http://{self.local_ip}:{port}",
+                        "stats": self.stats,
+                        "ultimas": list(self.feed),
+                    }
+                    resp_b = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+                    writer.write(
+                        b"HTTP/1.1 200 OK\r\n"
+                        b"Content-Type: application/json; charset=utf-8\r\n"
+                        + cors_headers +
+                        f"Content-Length: {len(resp_b)}\r\nConnection: close\r\n\r\n".encode("latin1")
+                        + resp_b
+                    )
+                elif path.startswith("/api/control") and method == "POST":
+                    try:
+                        data = json.loads(body_bytes.decode("utf-8", "ignore"))
+                        if "enabled" in data:
+                            self.enabled = bool(data["enabled"])
+                        if "proactive_enabled" in data:
+                            self.proactive_enabled = bool(data["proactive_enabled"])
+                        if "images_enabled" in data:
+                            self.images_enabled = bool(data["images_enabled"])
+                        if "forced_mood" in data and str(data["forced_mood"]) in VALID_MOODS:
+                            self.forced_mood = str(data["forced_mood"])
+                        self._save_control()
+                    except Exception as e:
+                        print(f"⚠️ Erro ao atualizar /api/control: {e}")
+                    br_ctx = get_brasilia_time_context()
+                    payload = {
+                        "online": True,
+                        "enabled": self.enabled,
+                        "proactive_enabled": self.proactive_enabled,
+                        "images_enabled": self.images_enabled,
+                        "forced_mood": self.forced_mood,
+                        "periodo": br_ctx["periodo"],
+                        "hora": br_ctx["hora_str"],
+                        "stats": self.stats,
+                        "ultimas": list(self.feed),
+                    }
+                    resp_b = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+                    writer.write(
+                        b"HTTP/1.1 200 OK\r\n"
+                        b"Content-Type: application/json; charset=utf-8\r\n"
+                        + cors_headers +
+                        f"Content-Length: {len(resp_b)}\r\nConnection: close\r\n\r\n".encode("latin1")
+                        + resp_b
+                    )
+                elif path.startswith("/api/action") and method == "POST":
+                    try:
+                        data = json.loads(body_bytes.decode("utf-8", "ignore"))
+                        act = data.get("action", "")
+                        if act == "proactive_now":
+                            asyncio.create_task(self.send_proactive_message(OWNER_CHAT_ID, stage=1))
+                        elif act == "image_now":
+                            asyncio.create_task(self.send_autonomous_image(OWNER_CHAT_ID))
+                        elif act == "reset_memory":
+                            self.histories.pop(str(OWNER_CHAT_ID), None)
+                            self._save_histories()
+                            self._record_feed("sistema", "Memória limpa via Android", "sistema")
+                    except Exception as e:
+                        print(f"⚠️ Erro ao executar /api/action: {e}")
+                    resp_b = b'{"ok": true}'
+                    writer.write(
+                        b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n"
+                        + cors_headers +
+                        b"Content-Length: 12\r\nConnection: close\r\n\r\n" + resp_b
+                    )
+                else:
+                    html_b = web_file.read_bytes() if web_file.exists() else b"<h1>Painel Android</h1>"
+                    writer.write(
+                        b"HTTP/1.1 200 OK\r\n"
+                        b"Content-Type: text/html; charset=utf-8\r\n"
+                        + cors_headers +
+                        f"Content-Length: {len(html_b)}\r\nConnection: close\r\n\r\n".encode("latin1")
+                        + html_b
+                    )
+                await writer.drain()
+            except Exception:
+                pass
+            finally:
+                try:
+                    writer.close()
+                    await writer.wait_closed()
+                except Exception:
+                    pass
+
+        try:
+            server = await asyncio.start_server(handle_request, "0.0.0.0", port)
+            print(f"📱 Servidor Painel Android ONLINE em http://{self.local_ip}:{port} (e http://localhost:{port})!")
+            return server
+        except Exception as e:
+            print(f"⚠️ Aviso ao iniciar servidor Android na porta {port}: {e}")
+            return None
+
     async def proactive_loop(self):
         """
-        Loop em background que monitora o tempo sem resposta e envia mensagens
-        independentes por conta própria enquanto o bot estiver ONLINE.
+        Loop em background que monitora ações do Painel/Android, sincroniza status
+        e envia mensagens/fotos independentes por conta própria enquanto estiver ONLINE.
         """
-        await asyncio.sleep(5)
-        print("💬 Loop de Iniciativa Própria ATIVO (Manda mensagens sozinho caso você não responda)!")
+        await asyncio.sleep(4)
+        print("💬 Loop de Iniciativa Própria & Autonomia ATIVO!")
         while True:
             try:
-                await asyncio.sleep(4)
+                await asyncio.sleep(2)
+                self._sync_control()
+                await self._process_actions()
+                self._dump_status()
+
                 if not self.enabled or not self.proactive_enabled:
                     continue
 
                 now = time.time()
                 for chat_id in list(self.last_interaction.keys()):
-                    # Não atropela se o usuário acabou de digitar algo
                     if self.pending_buffers.get(chat_id):
                         continue
                     task = self.debounce_tasks.get(chat_id)
@@ -1144,9 +1588,7 @@ class CloneContactBot:
                         continue
 
                     stage = self.proactive_stage.get(chat_id, 0)
-                    # Limita a até 5 iniciativas seguidas no vácuo para não fazer spam infinito;
-                    # assim que você responder, o contador zera na hora!
-                    if stage >= 5:
+                    if stage >= 6:
                         continue
 
                     elapsed = now - self.last_interaction.get(chat_id, now)
@@ -1159,7 +1601,14 @@ class CloneContactBot:
                     if elapsed >= required_wait:
                         self.proactive_stage[chat_id] = stage + 1
                         self.last_interaction[chat_id] = time.time()
-                        await self.send_proactive_message(chat_id, stage + 1)
+
+                        # Envio autônomo de imagens (Astrofísica, Paramore, RADWIMPS, Sufjan)
+                        sent_img = False
+                        if self.images_enabled and (stage >= 1 and (stage % 2 == 1 or random.random() < IMAGE_CHANCE)):
+                            sent_img = await self.send_autonomous_image(chat_id)
+
+                        if not sent_img:
+                            await self.send_proactive_message(chat_id, stage + 1)
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -1188,6 +1637,7 @@ class CloneContactBot:
                 await event.answer("🔴 Clone DESLIGADO!")
             elif data == "clone_proactive_toggle":
                 self.proactive_enabled = not self.proactive_enabled
+                self._save_control()
                 text, buttons = self._build_control_panel_markup()
                 try:
                     await event.edit(text, buttons=buttons)
@@ -1195,12 +1645,40 @@ class CloneContactBot:
                     pass
                 status_msg = "🟢 Iniciativa Própria LIGADA!" if self.proactive_enabled else "🔴 Iniciativa Própria PAUSADA!"
                 await event.answer(status_msg)
+            elif data == "clone_images_toggle":
+                self.images_enabled = not self.images_enabled
+                self._save_control()
+                text, buttons = self._build_control_panel_markup()
+                try:
+                    await event.edit(text, buttons=buttons)
+                except Exception:
+                    pass
+                status_msg = "🟢 Envio de Fotos ATIVO!" if self.images_enabled else "🔴 Envio de Fotos PAUSADO!"
+                await event.answer(status_msg)
             elif data == "clone_proactive_now":
                 await event.answer("⚡ Puxando assunto por conta própria agora!")
                 stage = self.proactive_stage.get(event.chat_id, 0) + 1
                 self.proactive_stage[event.chat_id] = stage
                 self.last_interaction[event.chat_id] = time.time()
                 await self.send_proactive_message(event.chat_id, max(2, stage))
+            elif data == "clone_image_now":
+                await event.answer("🖼️ Buscando e enviando foto...")
+                self.last_interaction[event.chat_id] = time.time()
+                await self.send_autonomous_image(event.chat_id)
+            elif data == "clone_android":
+                msg = (
+                    f"📱 **Painel Do Meu Clone no Celular (Android)**\n\n"
+                    f"Acesse no navegador do seu celular (mesmo Wi-Fi):\n"
+                    f"👉 **`http://{self.local_ip}:8765`**\n\n"
+                    f"💡 *Dica:* no Chrome do Android, clique nos três pontinhos e em **'Adicionar à tela inicial'** para transformar num App com ícone!\n\n"
+                    f"Ou controle aqui mesmo usando os comandos:\n"
+                    f"• `/on` e `/off` — Ligar e Desligar\n"
+                    f"• `/imagem` — Mandar foto de Astro/Músicas\n"
+                    f"• `/proactive` — Ligar/Desligar Iniciativa\n"
+                    f"• `/humor` — Gráficos de Humor"
+                )
+                await event.respond(msg)
+                await event.answer()
             elif data == "clone_mood":
                 chart_msg, chart_btns = format_telegram_mood_chart(self.forced_mood)
                 await event.respond(chart_msg, buttons=chart_btns)
@@ -1242,6 +1720,34 @@ class CloneContactBot:
                 return
 
             low = text.lower()
+            if low in ("/android", "!android", "/celular", "!celular", "/app", "!app"):
+                msg = (
+                    f"📱 **Painel Do Meu Clone no Celular (Android)**\n\n"
+                    f"Acesse no navegador do seu celular (mesmo Wi-Fi):\n"
+                    f"👉 **`http://{self.local_ip}:8765`**\n\n"
+                    f"💡 *Dica:* no Chrome do Android, clique nos três pontinhos e em **'Adicionar à tela inicial'** para transformar num App com ícone!\n\n"
+                    f"Comandos rápidos no Telegram:\n"
+                    f"• `/on` e `/off` — Ligar / Desligar\n"
+                    f"• `/imagem` ou `/foto` — Mandar imagem favorita\n"
+                    f"• `/proactive` — Alternar iniciativa própria\n"
+                    f"• `/humor` — Gráfico de humores"
+                )
+                await event.reply(msg)
+                return
+
+            if low in ("/imagem", "!imagem", "/foto", "!foto"):
+                await event.reply("🖼️ Deixa comigo, buscando uma foto maneira pra te mandar...")
+                self.last_interaction[event.chat_id] = time.time()
+                await self.send_autonomous_image(event.chat_id)
+                return
+
+            if low in ("/proactive", "!proactive", "/iniciativa", "!iniciativa"):
+                self.proactive_enabled = not self.proactive_enabled
+                self._save_control()
+                status_txt = "🟢 ATIVA" if self.proactive_enabled else "🔴 PAUSADA"
+                await event.reply(f"💬 Iniciativa Própria: {status_txt}")
+                return
+
             if low in ("/painel", "!painel", "/menu", "!menu", "/status", "!status"):
                 panel_text, buttons = self._build_control_panel_markup()
                 await event.reply(panel_text, buttons=buttons)
@@ -1299,7 +1805,10 @@ class CloneContactBot:
         print("🎙️ Escuta de Áudios: ATIVA (Entende mensagens de voz e áudios)")
         print("🎸 Música & Vocal: RADWIMPS, Paramore & Controle Vocal integrados!")
         print(f"💬 Iniciativa Própria: ATIVA (1ª msg em {int(PROACTIVE_FIRST_DELAY)}s sem resposta)")
+        print(f"📱 Painel Android: ONLINE em http://{self.local_ip}:8765")
         print("=" * 60)
+        self._dump_status()
+        asyncio.create_task(self.start_android_server(8765))
         asyncio.create_task(self.proactive_loop())
         await self.client.run_until_disconnected()
 
