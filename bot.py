@@ -39,7 +39,9 @@ AI_API_KEY = (os.getenv("GEMINI_API_KEY") or os.getenv("GROQ_API_KEY") or "").st
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "meu-clone")
 
-DEBOUNCE_SECONDS = float(os.getenv("DEBOUNCE_SECONDS", "2.0"))
+DEBOUNCE_SECONDS = float(os.getenv("DEBOUNCE_SECONDS", "0.15"))
+PROACTIVE_FIRST_DELAY = float(os.getenv("PROACTIVE_FIRST_DELAY", "45"))
+PROACTIVE_NEXT_DELAY = float(os.getenv("PROACTIVE_NEXT_DELAY", "90"))
 
 # Diretrizes específicas para cada um dos 7 humores
 MOOD_PROFILES: Dict[str, Tuple[str, str]] = {
@@ -558,6 +560,14 @@ def ensure_ollama_running():
     return False
 
 
+def clean_vei_style(text: str) -> str:
+    """Garante que 'vei' nunca saia com acento ou entre vírgulas ('véi')."""
+    text = re.sub(r",\s*\bv[ée]i\b\s*,", " vei ", text, flags=re.IGNORECASE)
+    text = re.sub(r",\s*\bv[ée]i\b", " vei", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bv[ée]i\b", "vei", text, flags=re.IGNORECASE)
+    return text
+
+
 class CloneContactBot:
     def __init__(self):
         pid_file = BASE_DIR / "bot.pid"
@@ -573,14 +583,28 @@ class CloneContactBot:
 
         ensure_ollama_running()
         self.client = TelegramClient(load_unlocked_session(SESSION_FILE), API_ID, API_HASH)
+        self.http_client = httpx.AsyncClient(timeout=20.0)
         self.mood_bank = load_mood_bank()
 
         self.enabled: bool = True
+        self.proactive_enabled: bool = True
         self.forced_mood: str = "auto"
         self.recent_moods: Dict[int, Deque[str]] = {}
         self.pending_buffers: Dict[int, List[str]] = {}
         self.debounce_tasks: Dict[int, asyncio.Task] = {}
         self.histories: Dict[str, List[Dict[str, str]]] = self._load_histories()
+
+        # Controle de iniciativa própria (mensagens independentes caso o usuário não responda)
+        now = time.time() - 25.0
+        self.last_interaction: Dict[int, float] = {5377524441: now}
+        self.proactive_stage: Dict[int, int] = {5377524441: 0}
+        for cid_str in self.histories.keys():
+            try:
+                cid = int(cid_str)
+                self.last_interaction[cid] = now
+                self.proactive_stage[cid] = 0
+            except Exception:
+                pass
 
     def _load_histories(self) -> Dict[str, List[Dict[str, str]]]:
         if CHAT_HISTORY_PATH.exists():
@@ -611,7 +635,8 @@ class CloneContactBot:
         self._save_histories()
 
     def _build_control_panel_markup(self):
-        status_emoji = "🟢 LIGADO (Respondendo)" if self.enabled else "🔴 DESLIGADO (Pausado)"
+        status_emoji = "🟢 LIGADO (Respondendo na Hora)" if self.enabled else "🔴 DESLIGADO (Pausado)"
+        proactive_emoji = "🟢 ATIVA (Manda msg sozinho)" if self.proactive_enabled else "🔴 PAUSADA"
         mood_str = (
             "🧠 Automático Inteligente"
             if self.forced_mood == "auto"
@@ -621,10 +646,11 @@ class CloneContactBot:
         text = (
             f"🎛️ **Painel de Controle do Seu Clone**\n\n"
             f"**Status atual:** {status_emoji}\n"
+            f"**Iniciativa Própria:** {proactive_emoji}\n"
             f"**Horário de Brasília:** `{br_ctx['hora_str']} ({br_ctx['dia_semana']})`\n"
             f"**Ritmo do Dia:** `{br_ctx['periodo']}`\n"
             f"**Humor:** `{mood_str}`\n"
-            f"**Motor IA:** Híbrido Inteligente (120B + RTX 5070)\n\n"
+            f"**Velocidade:** ⚡ Resposta Instantânea (Na Hora)\n\n"
             f"Clique nos botões abaixo para controlar:"
         )
         buttons = [
@@ -633,74 +659,95 @@ class CloneContactBot:
                 Button.inline("🔴 Desligar (OFF)", b"clone_off"),
             ],
             [
+                Button.inline(
+                    f"💬 Iniciativa: {'ON' if self.proactive_enabled else 'OFF'}",
+                    b"clone_proactive_toggle",
+                ),
+                Button.inline("⚡ Puxar Assunto Agora", b"clone_proactive_now"),
+            ],
+            [
                 Button.inline("📊 Gráfico de Humor", b"clone_mood"),
                 Button.inline("🧹 Limpar Memória", b"clone_reset"),
             ],
         ]
         return text, buttons
 
-    async def generate_ai_reply(self, chat_id: int, user_text: str, target_mood: str) -> str:
+    async def generate_ai_reply(
+        self,
+        chat_id: int,
+        user_text: str,
+        target_mood: str,
+        extra_instruction: str = "",
+    ) -> str:
         hist = self.histories.get(str(chat_id), [])
         sys_prompt = build_dynamic_system_prompt(user_text, target_mood, self.mood_bank)
+        if extra_instruction:
+            sys_prompt += f"\n\n## INSTRUÇÃO ESPECIAL AGORA:\n{extra_instruction}\n"
         messages = [{"role": "system", "content": sys_prompt}] + hist
 
-        async with httpx.AsyncClient(timeout=35.0) as http_client:
-            # 1. Tenta primeiro os modelos gigantes (120B / 27B) com prompt RAG enxuto para máxima inteligência!
-            if AI_API_KEY.startswith("gsk_"):
-                for groq_model in ("openai/gpt-oss-120b", "qwen/qwen3.8-27b", "openai/gpt-oss-20b"):
-                    try:
-                        resp = await http_client.post(
-                            "https://api.groq.com/openai/v1/chat/completions",
-                            headers={"Authorization": f"Bearer {AI_API_KEY}"},
-                            json={
-                                "model": groq_model,
-                                "messages": messages,
-                                "temperature": 0.72,
-                                "max_tokens": 600,
-                            },
-                            timeout=18.0,
-                        )
-                        if resp.status_code == 200:
-                            content = (resp.json()["choices"][0]["message"]["content"] or "").strip()
-                            if "</think>" in content:
-                                content = content.split("</think>")[-1].strip()
-                            if content:
-                                return content
-                    except Exception:
-                        continue
-
-            # 2. Servidor Local na sua RTX 5070 (Ollama — zero limites, sempre disponível!)
-            for local_model in (OLLAMA_MODEL, "qwen2.5:7b", "llama3.1:8b"):
+        # 1. Modelos rápidos na Groq com conexão persistente para responder NA HORA!
+        if AI_API_KEY.startswith("gsk_"):
+            for groq_model in ("openai/gpt-oss-120b", "qwen/qwen3.8-27b", "openai/gpt-oss-20b"):
                 try:
-                    resp = await http_client.post(
-                        f"{OLLAMA_URL}/api/chat",
+                    resp = await self.http_client.post(
+                        "https://api.groq.com/openai/v1/chat/completions",
+                        headers={"Authorization": f"Bearer {AI_API_KEY}"},
                         json={
-                            "model": local_model,
+                            "model": groq_model,
                             "messages": messages,
-                            "stream": False,
-                            "options": {"temperature": 0.72, "num_predict": 160},
+                            "temperature": 0.75,
+                            "max_tokens": 350,
                         },
-                        timeout=25.0,
+                        timeout=10.0,
                     )
                     if resp.status_code == 200:
-                        content = (resp.json().get("message", {}).get("content") or "").strip()
+                        content = (resp.json()["choices"][0]["message"]["content"] or "").strip()
+                        if "</think>" in content:
+                            content = content.split("</think>")[-1].strip()
                         if content:
-                            return content
+                            return clean_vei_style(content)
                 except Exception:
-                    break
+                    continue
 
-            # 3. Fallback adicional sem limites
-            resp = await http_client.post(
+        # 2. Servidor Local na sua RTX 5070 (Ollama — zero limites, sempre disponível!)
+        for local_model in (OLLAMA_MODEL, "qwen2.5:7b", "llama3.1:8b"):
+            try:
+                resp = await self.http_client.post(
+                    f"{OLLAMA_URL}/api/chat",
+                    json={
+                        "model": local_model,
+                        "messages": messages,
+                        "stream": False,
+                        "options": {"temperature": 0.75, "num_predict": 140},
+                    },
+                    timeout=15.0,
+                )
+                if resp.status_code == 200:
+                    content = (resp.json().get("message", {}).get("content") or "").strip()
+                    if content:
+                        return clean_vei_style(content)
+            except Exception:
+                break
+
+        # 3. Fallback adicional sem limites
+        try:
+            resp = await self.http_client.post(
                 "https://text.pollinations.ai/openai",
-                json={"model": "openai", "messages": messages, "temperature": 0.72},
+                json={"model": "openai", "messages": messages, "temperature": 0.75},
+                timeout=12.0,
             )
             if resp.status_code == 200:
-                return (resp.json()["choices"][0]["message"]["content"] or "").strip()
+                content = (resp.json()["choices"][0]["message"]["content"] or "").strip()
+                if content:
+                    return clean_vei_style(content)
+        except Exception:
+            pass
 
         return "Oxe\nperaí q deu ruim aq"
 
     async def process_debounced_reply(self, chat_id: int, contact_name: str):
         try:
+            # Espera mínima (0.15s) para responder NA HORA que você mandar mensagem!
             await asyncio.sleep(DEBOUNCE_SECONDS)
 
             if not self.enabled:
@@ -710,6 +757,9 @@ class CloneContactBot:
             incoming_messages = self.pending_buffers.pop(chat_id, [])
             if not incoming_messages:
                 return
+
+            self.last_interaction[chat_id] = time.time()
+            self.proactive_stage[chat_id] = 0
 
             combined_user_text = "\n".join(incoming_messages)
             recent_q = self.recent_moods.setdefault(chat_id, deque(maxlen=4))
@@ -723,34 +773,167 @@ class CloneContactBot:
 
             self.append_history(chat_id, "user", combined_user_text)
 
-            reply_text = await self.generate_ai_reply(chat_id, combined_user_text, target_mood)
+            # Mostra "digitando..." apenas durante a geração da IA e já envia o 1º balão NA HORA (zero sleep extra!)
+            async with self.client.action(chat_id, "typing"):
+                reply_text = await self.generate_ai_reply(chat_id, combined_user_text, target_mood)
+
             if not reply_text:
                 return
 
-            bubbles = [b.strip() for b in reply_text.splitlines() if b.strip()][:4]
+            bubbles = [clean_vei_style(b.strip()) for b in reply_text.splitlines() if b.strip()][:4]
             joined_reply = "\n".join(bubbles)
             self.append_history(chat_id, "assistant", joined_reply)
             update_mood_stats_file(target_mood, joined_reply)
 
             for idx, bubble in enumerate(bubbles):
-                typing_duration = min(max(len(bubble) * 0.05, 0.8), 2.5)
-                async with self.client.action(chat_id, "typing"):
-                    await asyncio.sleep(typing_duration)
-
+                if idx > 0:
+                    async with self.client.action(chat_id, "typing"):
+                        await asyncio.sleep(0.22)
                 await self.client.send_message(chat_id, bubble)
-                print(f"🤖 [{mood_title}] -> [{contact_name}] ({idx + 1}/{len(bubbles)}): {bubble}")
-                if idx < len(bubbles) - 1:
-                    await asyncio.sleep(random.uniform(0.3, 0.7))
+                print(f"⚡ [{mood_title}] -> [{contact_name}] ({idx + 1}/{len(bubbles)}): {bubble}")
+
+            # Atualiza o relógio de interação para contar o tempo de silêncio a partir de agora
+            self.last_interaction[chat_id] = time.time()
+            self.proactive_stage[chat_id] = 0
 
         except asyncio.CancelledError:
             pass
         except Exception as e:
             print(f"❌ Erro ao responder no chat {chat_id}: {e}")
 
+    async def send_proactive_message(self, chat_id: int, stage: int):
+        """
+        Gera e envia uma mensagem independente (por conta própria) quando a pessoa
+        fica sem responder enquanto o clone está online.
+        """
+        br_ctx = get_brasilia_time_context()
+        recent_q = self.recent_moods.setdefault(chat_id, deque(maxlen=4))
+
+        # Escolhe um tema e humor espontâneo variado de acordo com o estágio de silêncio e o Horário de Brasília
+        if stage == 1:
+            # 1ª mensagem espontânea (após ~45s sem resposta): continuar o assunto ou cobrar atenção com carinho/zoeira
+            proactive_options = [
+                (
+                    "empolgado_amooo",
+                    "oii meu bem beee lindo ❤️ ta fazendo oq",
+                    "A pessoa ainda não respondeu sua última mensagem! Mande uma mensagem curta e carinhosa por conta própria (ex: perguntando o que ela tá fazendo agora, se tá tudo bem, ou chamando de 'lindo' / 'meu bem' / 'beee' / 'sumiu foi? ❤️') sem repetir exatamente o que você acabou de falar.",
+                ),
+                (
+                    "chocado_fofoca",
+                    "oxe sumiu do nada vei conta",
+                    "A pessoa sumiu e não respondeu ainda! Mande uma mensagem curta e espontânea brincando que ela sumiu ('Oxe sumiu foi?', 'E aiii vei', 'Me deixou no vácuo msm kkkkk') ou puxando conversa.",
+                ),
+            ]
+        else:
+            # Mensagens espontâneas seguintes: puxa assuntos reais do Filipe (Astrofísica, Jogos, Afeto Murilo, Música/Sonhos)
+            proactive_options = [
+                (
+                    "reflexivo_pensativo",
+                    "astrofísica universo buraco negro james webb teoria big bounce sonho",
+                    f"A pessoa está quieta e você resolveu puxar assunto POR CONTA PRÓPRIA agora ({br_ctx['hora_str']} - {br_ctx['periodo']}) sobre sua grande paixão: ASTROFÍSICA, COSMOLOGIA e TEORIAS DO UNIVERSO! Compartilhe um pensamento espontâneo seu sobre buracos negros, galáxias do James Webb, Big Bounce, dilatação do tempo ou aquele sonho que você teve vendo a criação do universo, perguntando o que a pessoa acha.",
+                ),
+                (
+                    "empolgado_amooo",
+                    "lindo lindãooo meu bem beee te amo qualquer coisa me manda mensagem ❤️",
+                    f"Você resolveu mandar uma mensagem espontânea e BEM AFETIVA por conta própria agora ({br_ctx['hora_str']} - {br_ctx['periodo']}), igual você faz com o Murilo Mariano! Diga algo doce e acolhedor ('Passando só pra dizer q to aqui viu meu bem ❤️', 'Como tá sendo seu dia lindãooo?', 'Saudade de conversar ctg beee :3').",
+                ),
+                (
+                    "gamer_deboa",
+                    "jogar fortnite vava minecraft pc bora amassando os cara",
+                    f"Você resolveu puxar assunto por conta própria agora ({br_ctx['hora_str']} - {br_ctx['periodo']}) falando do que tá fazendo no PC ou chamando pra jogar (Fortnite 'amassando os cara', Minecraft 'Minecraftuss', Valorant/vava, Overwatch ou DBZ Sparking Zero).",
+                ),
+                (
+                    "zoeira_rindo",
+                    "kkkkk skakdakdak música cantando resenha",
+                    f"Você resolveu mandar algo espontâneo e engraçado por conta própria agora ({br_ctx['hora_str']} - {br_ctx['periodo']}), comentando alguma brisa aleatória sua, que tava cantando uma música aqui do nada ou perguntando se a pessoa morreu aí kkkkkk.",
+                ),
+            ]
+
+        # Evita repetir o mesmo humor seguido
+        filtered = [opt for opt in proactive_options if opt[0] not in list(recent_q)[-1:]] or proactive_options
+        mood_key, seed_keywords, instruction = random.choice(filtered)
+        if self.forced_mood in FORCED_MODE_TO_KEY:
+            mood_key = FORCED_MODE_TO_KEY[self.forced_mood]
+
+        recent_q.append(mood_key)
+        mood_title = MOOD_PROFILES[mood_key][0]
+
+        reply_text = await self.generate_ai_reply(
+            chat_id,
+            seed_keywords,
+            mood_key,
+            extra_instruction=instruction,
+        )
+        if not reply_text:
+            return
+
+        # Se o usuário mandou mensagem enquanto gerávamos, cancela o envio espontâneo para responder o usuário NA HORA!
+        if chat_id in self.pending_buffers and self.pending_buffers[chat_id]:
+            return
+
+        bubbles = [clean_vei_style(b.strip()) for b in reply_text.splitlines() if b.strip()][:2]
+        if not bubbles:
+            return
+
+        joined_reply = "\n".join(bubbles)
+        self.append_history(chat_id, "assistant", joined_reply)
+        update_mood_stats_file(mood_key, joined_reply)
+
+        for idx, bubble in enumerate(bubbles):
+            if idx > 0:
+                await asyncio.sleep(0.25)
+            await self.client.send_message(chat_id, bubble)
+            print(f"💬 [INICIATIVA PRÓPRIA #{stage} | {mood_title}] -> [{chat_id}]: {bubble}")
+
+    async def proactive_loop(self):
+        """
+        Loop em background que monitora o tempo sem resposta e envia mensagens
+        independentes por conta própria enquanto o bot estiver ONLINE.
+        """
+        await asyncio.sleep(5)
+        print("💬 Loop de Iniciativa Própria ATIVO (Manda mensagens sozinho caso você não responda)!")
+        while True:
+            try:
+                await asyncio.sleep(4)
+                if not self.enabled or not self.proactive_enabled:
+                    continue
+
+                now = time.time()
+                for chat_id in list(self.last_interaction.keys()):
+                    # Não atropela se o usuário acabou de digitar algo
+                    if self.pending_buffers.get(chat_id):
+                        continue
+                    task = self.debounce_tasks.get(chat_id)
+                    if task and not task.done():
+                        continue
+
+                    stage = self.proactive_stage.get(chat_id, 0)
+                    # Limita a até 5 iniciativas seguidas no vácuo para não fazer spam infinito;
+                    # assim que você responder, o contador zera na hora!
+                    if stage >= 5:
+                        continue
+
+                    elapsed = now - self.last_interaction.get(chat_id, now)
+                    required_wait = (
+                        PROACTIVE_FIRST_DELAY
+                        if stage == 0
+                        else PROACTIVE_NEXT_DELAY * stage
+                    )
+
+                    if elapsed >= required_wait:
+                        self.proactive_stage[chat_id] = stage + 1
+                        self.last_interaction[chat_id] = time.time()
+                        await self.send_proactive_message(chat_id, stage + 1)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                print(f"⚠️ Aviso no loop de iniciativa própria: {e}")
+
     async def start(self):
         @self.client.on(events.CallbackQuery)
         async def on_callback(event):
             data = event.data.decode("utf-8")
+            self.last_interaction[event.chat_id] = time.time()
             if data == "clone_on":
                 self.enabled = True
                 text, buttons = self._build_control_panel_markup()
@@ -767,6 +950,21 @@ class CloneContactBot:
                 except Exception:
                     pass
                 await event.answer("🔴 Clone DESLIGADO!")
+            elif data == "clone_proactive_toggle":
+                self.proactive_enabled = not self.proactive_enabled
+                text, buttons = self._build_control_panel_markup()
+                try:
+                    await event.edit(text, buttons=buttons)
+                except Exception:
+                    pass
+                status_msg = "🟢 Iniciativa Própria LIGADA!" if self.proactive_enabled else "🔴 Iniciativa Própria PAUSADA!"
+                await event.answer(status_msg)
+            elif data == "clone_proactive_now":
+                await event.answer("⚡ Puxando assunto por conta própria agora!")
+                stage = self.proactive_stage.get(event.chat_id, 0) + 1
+                self.proactive_stage[event.chat_id] = stage
+                self.last_interaction[event.chat_id] = time.time()
+                await self.send_proactive_message(event.chat_id, max(2, stage))
             elif data == "clone_mood":
                 chart_msg, chart_btns = format_telegram_mood_chart(self.forced_mood)
                 await event.respond(chart_msg, buttons=chart_btns)
@@ -790,6 +988,10 @@ class CloneContactBot:
             text = (event.raw_text or "").strip()
             if not text:
                 return
+
+            # Registra interação imediatamente para zerar o contador de silêncio
+            self.last_interaction[event.chat_id] = time.time()
+            self.proactive_stage[event.chat_id] = 0
 
             low = text.lower()
             if low in ("/painel", "!painel", "/menu", "!menu", "/status", "!status"):
@@ -838,15 +1040,17 @@ class CloneContactBot:
                 self.process_debounced_reply(event.chat_id, contact_name)
             )
 
-        print("🚀 Iniciando seu Clone Inteligente (RAG 1.400 conversas + Humor Dinâmico)...")
+        print("🚀 Iniciando seu Clone Inteligente (Resposta Instantânea + Iniciativa Própria)...")
         await self.client.connect()
         if not await self.client.is_user_authorized():
             await self.client.start(bot_token=BOT_TOKEN)
         me = await self.client.get_me()
         print("=" * 60)
         print(f"✅ Contato do seu Clone ONLINE: {me.first_name} (@{me.username})")
-        print(f"🧠 Motor RAG: 1.400 pares reais (200 por humor) + Detector Contextual Ativo!")
+        print(f"⚡ Velocidade: Resposta NA HORA (Debounce {DEBOUNCE_SECONDS}s + Zero Delay)")
+        print(f"💬 Iniciativa Própria: ATIVA (1ª msg em {int(PROACTIVE_FIRST_DELAY)}s sem resposta)")
         print("=" * 60)
+        asyncio.create_task(self.proactive_loop())
         await self.client.run_until_disconnected()
 
 
