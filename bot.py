@@ -39,9 +39,19 @@ AI_API_KEY = (os.getenv("GEMINI_API_KEY") or os.getenv("GROQ_API_KEY") or "").st
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "meu-clone")
 
-DEBOUNCE_SECONDS = float(os.getenv("DEBOUNCE_SECONDS", "0.15"))
+DEBOUNCE_SECONDS = float(os.getenv("DEBOUNCE_SECONDS", "0.8"))
 PROACTIVE_FIRST_DELAY = float(os.getenv("PROACTIVE_FIRST_DELAY", "45"))
 PROACTIVE_NEXT_DELAY = float(os.getenv("PROACTIVE_NEXT_DELAY", "90"))
+
+
+def calc_human_typing_seconds(text: str) -> float:
+    """
+    Calcula o tempo real de uma pessoa digitando aquela frase no celular/PC
+    (~15 a 18 caracteres por segundo + pequena variação humana).
+    """
+    char_count = max(1, len(text.strip()))
+    base_time = char_count * random.uniform(0.052, 0.068) + random.uniform(0.35, 0.65)
+    return min(max(base_time, 1.15), 3.8)
 
 # Diretrizes específicas para cada um dos 7 humores
 MOOD_PROFILES: Dict[str, Tuple[str, str]] = {
@@ -295,7 +305,17 @@ def detect_contextual_mood(
         if kw in t:
             scores["gamer_deboa"] += 3.5
 
-    # 6. Sinais de Afetivo / Carinhoso / Empolgado (Bem afetivo igual com Murilo!)
+    # 6. Sinais de Afetivo / Carinhoso / Empolgado & Paixão por Música/Vocal (RADWIMPS & Paramore)
+    for music_kw in [
+        "radwimps", "paramore", "hayley", "yojiro", "vocal", "controle vocal",
+        "cantar", "canto", "cantando", "música", "musica", "banda", "belting",
+        "falsete", "alcance vocal", "voz", "afinação", "afinacao", "suzume",
+        "sparkle", "zenzenzense", "decode"
+    ]:
+        if music_kw in t:
+            scores["empolgado_amooo"] += 5.5
+            scores["reflexivo_pensativo"] += 3.0
+
     for kw in [
         "amooo", "amo", "te amo", "lindo", "linda", "lindhu", "lindão", "fofo", "fofa",
         "anjo", "meu bem", "bb", "bebê", "bebe", "beee", "amore", "amor", "amigo",
@@ -370,6 +390,18 @@ def retrieve_relevant_examples(
     ):
         for p in mood_bank.get("reflexivo_pensativo", []):
             if p.get("chat") in ("Astrofísica & Universo", "Vendell") and p not in selected:
+                selected.insert(0, p)
+
+    if any(
+        mk in low_t
+        for mk in [
+            "radwimps", "paramore", "hayley", "yojiro", "vocal", "controle vocal",
+            "cantar", "canto", "cantando", "música", "musica", "banda", "belting",
+            "falsete", "alcance", "voz", "suzume", "sparkle", "decode"
+        ]
+    ):
+        for p in mood_bank.get("empolgado_amooo", []):
+            if p.get("chat") == "Música & Vocal" and p not in selected:
                 selected.insert(0, p)
 
     if target_mood == "empolgado_amooo":
@@ -745,9 +777,65 @@ class CloneContactBot:
 
         return "Oxe\nperaí q deu ruim aq"
 
+    async def transcribe_telegram_audio(self, event) -> str:
+        """
+        Escuta e transcreve mensagens de voz (voice notes) e arquivos de áudio
+        enviados no Telegram usando Whisper Large V3 Turbo.
+        """
+        msg = getattr(event, "message", None)
+        if not msg:
+            return ""
+
+        is_voice_or_audio = bool(getattr(msg, "voice", False) or getattr(msg, "audio", False))
+        file_obj = getattr(msg, "file", None)
+        mime_type = getattr(file_obj, "mime_type", "") or ""
+        if not is_voice_or_audio and not mime_type.startswith("audio/") and mime_type != "video/ogg":
+            return ""
+
+        try:
+            audio_bytes = await msg.download_media(file=bytes)
+            if not audio_bytes:
+                return ""
+
+            ext = getattr(file_obj, "ext", None) or ".ogg"
+            if not ext.startswith("."):
+                ext = f".{ext}"
+            filename = f"telegram_voice{ext}"
+            content_type = mime_type if mime_type else "audio/ogg"
+
+            if AI_API_KEY.startswith("gsk_"):
+                for whisper_model in ("whisper-large-v3-turbo", "whisper-large-v3"):
+                    try:
+                        resp = await self.http_client.post(
+                            "https://api.groq.com/openai/v1/audio/transcriptions",
+                            headers={"Authorization": f"Bearer {AI_API_KEY}"},
+                            files={"file": (filename, audio_bytes, content_type)},
+                            data={
+                                "model": whisper_model,
+                                "language": "pt",
+                                "prompt": (
+                                    "Conversa de voz no Telegram com Filipe (Lipe, lil). "
+                                    "Termos comuns: vei, vey, oxe, RADWIMPS, Paramore, Hayley Williams, "
+                                    "Yojiro Noda, vocal, controle vocal, belting, falsete, astrofísica, "
+                                    "cosmologia, universo, buraco negro, James Webb, Fortnite, Valorant, vava, Minecraft."
+                                ),
+                            },
+                            timeout=18.0,
+                        )
+                        if resp.status_code == 200:
+                            transcript = (resp.json().get("text") or "").strip()
+                            if transcript:
+                                return transcript
+                    except Exception:
+                        continue
+        except Exception as e:
+            print(f"⚠️ Erro ao escutar/transcrever áudio: {e}")
+
+        return ""
+
     async def process_debounced_reply(self, chat_id: int, contact_name: str):
         try:
-            # Espera mínima (0.15s) para responder NA HORA que você mandar mensagem!
+            # Pausa humana rápida de leitura antes de começar a digitar
             await asyncio.sleep(DEBOUNCE_SECONDS)
 
             if not self.enabled:
@@ -764,7 +852,7 @@ class CloneContactBot:
             combined_user_text = "\n".join(incoming_messages)
             recent_q = self.recent_moods.setdefault(chat_id, deque(maxlen=4))
 
-            # Detecta o humor ideal baseado em como a pessoa digitou + equilíbrio de histórico!
+            # Detecta o humor ideal baseado em como a pessoa digitou/falou + equilíbrio de histórico!
             target_mood = detect_contextual_mood(combined_user_text, recent_q, self.forced_mood)
             recent_q.append(target_mood)
             mood_title = MOOD_PROFILES[target_mood][0]
@@ -773,24 +861,37 @@ class CloneContactBot:
 
             self.append_history(chat_id, "user", combined_user_text)
 
-            # Mostra "digitando..." apenas durante a geração da IA e já envia o 1º balão NA HORA (zero sleep extra!)
+            # Começa a mostrar "digitando..." enquanto pensa e calcula o tempo real de digitação
+            t_start = time.time()
             async with self.client.action(chat_id, "typing"):
                 reply_text = await self.generate_ai_reply(chat_id, combined_user_text, target_mood)
+                gen_elapsed = time.time() - t_start
 
-            if not reply_text:
-                return
+                if not reply_text:
+                    return
 
-            bubbles = [clean_vei_style(b.strip()) for b in reply_text.splitlines() if b.strip()][:4]
+                bubbles = [clean_vei_style(b.strip()) for b in reply_text.splitlines() if b.strip()][:4]
+                if not bubbles:
+                    return
+
+                # Completa o tempo humano de digitação do 1º balão (descontando o que já passou gerando)
+                first_typing_wait = max(0.35, calc_human_typing_seconds(bubbles[0]) - gen_elapsed)
+                await asyncio.sleep(first_typing_wait)
+
             joined_reply = "\n".join(bubbles)
             self.append_history(chat_id, "assistant", joined_reply)
             update_mood_stats_file(target_mood, joined_reply)
 
             for idx, bubble in enumerate(bubbles):
                 if idx > 0:
+                    # Pausa natural entre um balão e outro + tempo real digitando o próximo balão
+                    await asyncio.sleep(random.uniform(0.35, 0.75))
+                    typing_duration = calc_human_typing_seconds(bubble)
                     async with self.client.action(chat_id, "typing"):
-                        await asyncio.sleep(0.22)
+                        await asyncio.sleep(typing_duration)
+
                 await self.client.send_message(chat_id, bubble)
-                print(f"⚡ [{mood_title}] -> [{contact_name}] ({idx + 1}/{len(bubbles)}): {bubble}")
+                print(f"⌨️ [{mood_title}] -> [{contact_name}] ({idx + 1}/{len(bubbles)}): {bubble}")
 
             # Atualiza o relógio de interação para contar o tempo de silêncio a partir de agora
             self.last_interaction[chat_id] = time.time()
@@ -804,29 +905,34 @@ class CloneContactBot:
     async def send_proactive_message(self, chat_id: int, stage: int):
         """
         Gera e envia uma mensagem independente (por conta própria) quando a pessoa
-        fica sem responder enquanto o clone está online.
+        fica sem responder enquanto o clone está online, simulando digitação humana real.
         """
         br_ctx = get_brasilia_time_context()
         recent_q = self.recent_moods.setdefault(chat_id, deque(maxlen=4))
 
         # Escolhe um tema e humor espontâneo variado de acordo com o estágio de silêncio e o Horário de Brasília
         if stage == 1:
-            # 1ª mensagem espontânea (após ~45s sem resposta): continuar o assunto ou cobrar atenção com carinho/zoeira
+            # 1ª mensagem espontânea (após ~45s sem resposta): continuar o assunto ou chamar com carinho/zoeira
             proactive_options = [
                 (
                     "empolgado_amooo",
-                    "oii meu bem beee lindo ❤️ ta fazendo oq",
-                    "A pessoa ainda não respondeu sua última mensagem! Mande uma mensagem curta e carinhosa por conta própria (ex: perguntando o que ela tá fazendo agora, se tá tudo bem, ou chamando de 'lindo' / 'meu bem' / 'beee' / 'sumiu foi? ❤️') sem repetir exatamente o que você acabou de falar.",
+                    "oii lil meu bem lindo ❤️ ta fazendo oq",
+                    "A pessoa ainda não respondeu sua última mensagem! Mande uma mensagem curta e carinhosa por conta própria (ex: perguntando o que ela tá fazendo agora, se tá tudo bem, ou chamando de 'lil' / 'lindo' / 'meu bem' / 'sumiu foi? ❤️') sem repetir exatamente o que você acabou de falar.",
                 ),
                 (
                     "chocado_fofoca",
                     "oxe sumiu do nada vei conta",
-                    "A pessoa sumiu e não respondeu ainda! Mande uma mensagem curta e espontânea brincando que ela sumiu ('Oxe sumiu foi?', 'E aiii vei', 'Me deixou no vácuo msm kkkkk') ou puxando conversa.",
+                    "A pessoa sumiu e não respondeu ainda! Mande uma mensagem curta e espontânea brincando que ela sumiu ('Oxe sumiu foi?', 'E aiii lil', 'Me deixou no vácuo msm kkkkk') ou puxando conversa.",
                 ),
             ]
         else:
-            # Mensagens espontâneas seguintes: puxa assuntos reais do Filipe (Astrofísica, Jogos, Afeto Murilo, Música/Sonhos)
+            # Mensagens espontâneas seguintes: puxa assuntos reais do Filipe (RADWIMPS/Paramore/Vocal, Astrofísica, Jogos, Afeto)
             proactive_options = [
+                (
+                    "empolgado_amooo",
+                    "radwimps paramore vocal controle vocal cantar música hayley williams yojiro",
+                    f"A pessoa está quieta e você resolveu puxar assunto POR CONTA PRÓPRIA agora ({br_ctx['hora_str']} - {br_ctx['periodo']}) falando sobre suas bandas favoritas (RADWIMPS e Paramore) ou sobre VOCAL e CONTROLE VOCAL! Comente que estava escutando ou cantando uma música do RADWIMPS ou do Paramore agora, reparando no controle vocal absurdo (belting, falsete, dinâmica da voz), e pergunte o que a pessoa tá ouvindo.",
+                ),
                 (
                     "reflexivo_pensativo",
                     "astrofísica universo buraco negro james webb teoria big bounce sonho",
@@ -834,18 +940,13 @@ class CloneContactBot:
                 ),
                 (
                     "empolgado_amooo",
-                    "lindo lindãooo meu bem beee te amo qualquer coisa me manda mensagem ❤️",
-                    f"Você resolveu mandar uma mensagem espontânea e BEM AFETIVA por conta própria agora ({br_ctx['hora_str']} - {br_ctx['periodo']}), igual você faz com o Murilo Mariano! Diga algo doce e acolhedor ('Passando só pra dizer q to aqui viu meu bem ❤️', 'Como tá sendo seu dia lindãooo?', 'Saudade de conversar ctg beee :3').",
+                    "lindo lindãooo meu bem lil te amo qualquer coisa me manda mensagem ❤️",
+                    f"Você resolveu mandar uma mensagem espontânea e BEM AFETIVA por conta própria agora ({br_ctx['hora_str']} - {br_ctx['periodo']}), igual você faz com o Murilo Mariano! Diga algo doce e acolhedor ('Passando só pra dizer q to aqui viu ❤️', 'Como tá sendo sua noite lindãooo?', 'Saudade de conversar ctg :3').",
                 ),
                 (
                     "gamer_deboa",
                     "jogar fortnite vava minecraft pc bora amassando os cara",
                     f"Você resolveu puxar assunto por conta própria agora ({br_ctx['hora_str']} - {br_ctx['periodo']}) falando do que tá fazendo no PC ou chamando pra jogar (Fortnite 'amassando os cara', Minecraft 'Minecraftuss', Valorant/vava, Overwatch ou DBZ Sparking Zero).",
-                ),
-                (
-                    "zoeira_rindo",
-                    "kkkkk skakdakdak música cantando resenha",
-                    f"Você resolveu mandar algo espontâneo e engraçado por conta própria agora ({br_ctx['hora_str']} - {br_ctx['periodo']}), comentando alguma brisa aleatória sua, que tava cantando uma música aqui do nada ou perguntando se a pessoa morreu aí kkkkkk.",
                 ),
             ]
 
@@ -867,7 +968,7 @@ class CloneContactBot:
         if not reply_text:
             return
 
-        # Se o usuário mandou mensagem enquanto gerávamos, cancela o envio espontâneo para responder o usuário NA HORA!
+        # Se o usuário mandou mensagem enquanto gerávamos, cancela o envio espontâneo
         if chat_id in self.pending_buffers and self.pending_buffers[chat_id]:
             return
 
@@ -881,7 +982,10 @@ class CloneContactBot:
 
         for idx, bubble in enumerate(bubbles):
             if idx > 0:
-                await asyncio.sleep(0.25)
+                await asyncio.sleep(random.uniform(0.35, 0.7))
+            typing_duration = calc_human_typing_seconds(bubble)
+            async with self.client.action(chat_id, "typing"):
+                await asyncio.sleep(typing_duration)
             await self.client.send_message(chat_id, bubble)
             print(f"💬 [INICIATIVA PRÓPRIA #{stage} | {mood_title}] -> [{chat_id}]: {bubble}")
 
@@ -985,13 +1089,20 @@ class CloneContactBot:
 
         @self.client.on(events.NewMessage(incoming=True))
         async def on_new_message(event):
-            text = (event.raw_text or "").strip()
-            if not text:
-                return
-
             # Registra interação imediatamente para zerar o contador de silêncio
             self.last_interaction[event.chat_id] = time.time()
             self.proactive_stage[event.chat_id] = 0
+
+            text = (event.raw_text or "").strip()
+
+            # Verifica se a pessoa enviou um áudio / mensagem de voz e escuta o conteúdo!
+            audio_transcript = await self.transcribe_telegram_audio(event)
+            if audio_transcript:
+                print(f"🎙️ [Áudio escutado no chat {event.chat_id}]: {audio_transcript}")
+                text = f"{text}\n{audio_transcript}".strip() if text else audio_transcript
+
+            if not text:
+                return
 
             low = text.lower()
             if low in ("/painel", "!painel", "/menu", "!menu", "/status", "!status"):
@@ -1040,14 +1151,16 @@ class CloneContactBot:
                 self.process_debounced_reply(event.chat_id, contact_name)
             )
 
-        print("🚀 Iniciando seu Clone Inteligente (Resposta Instantânea + Iniciativa Própria)...")
+        print("🚀 Iniciando seu Clone Inteligente (Digitação Real + Áudios + Iniciativa Própria)...")
         await self.client.connect()
         if not await self.client.is_user_authorized():
             await self.client.start(bot_token=BOT_TOKEN)
         me = await self.client.get_me()
         print("=" * 60)
         print(f"✅ Contato do seu Clone ONLINE: {me.first_name} (@{me.username})")
-        print(f"⚡ Velocidade: Resposta NA HORA (Debounce {DEBOUNCE_SECONDS}s + Zero Delay)")
+        print("⌨️ Digitação Humana Real: ATIVA (Tempo real proporcional a cada frase)")
+        print("🎙️ Escuta de Áudios: ATIVA (Entende mensagens de voz e áudios)")
+        print("🎸 Música & Vocal: RADWIMPS, Paramore & Controle Vocal integrados!")
         print(f"💬 Iniciativa Própria: ATIVA (1ª msg em {int(PROACTIVE_FIRST_DELAY)}s sem resposta)")
         print("=" * 60)
         asyncio.create_task(self.proactive_loop())
