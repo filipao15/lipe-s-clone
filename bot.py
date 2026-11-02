@@ -305,16 +305,17 @@ def detect_contextual_mood(
         if kw in t:
             scores["gamer_deboa"] += 3.5
 
-    # 6. Sinais de Afetivo / Carinhoso / Empolgado & Paixão por Música/Vocal (RADWIMPS & Paramore)
+    # 6. Sinais de Afetivo / Carinhoso / Empolgado & Paixão por Música/Vocal (RADWIMPS, Paramore, Sufjan Stevens)
     for music_kw in [
-        "radwimps", "paramore", "hayley", "yojiro", "vocal", "controle vocal",
-        "cantar", "canto", "cantando", "música", "musica", "banda", "belting",
-        "falsete", "alcance vocal", "voz", "afinação", "afinacao", "suzume",
-        "sparkle", "zenzenzense", "decode"
+        "radwimps", "paramore", "sufjan", "sufjan stevens", "hayley", "yojiro",
+        "vocal", "controle vocal", "cantar", "canto", "cantando", "música", "musica",
+        "banda", "belting", "falsete", "alcance vocal", "voz", "afinação", "afinacao",
+        "suzume", "sparkle", "zenzenzense", "decode", "mystery of love", "fourth of july",
+        "visions of gideon", "casimir", "youtube.com", "youtu.be"
     ]:
         if music_kw in t:
             scores["empolgado_amooo"] += 5.5
-            scores["reflexivo_pensativo"] += 3.0
+            scores["reflexivo_pensativo"] += 3.2
 
     for kw in [
         "amooo", "amo", "te amo", "lindo", "linda", "lindhu", "lindão", "fofo", "fofa",
@@ -395,9 +396,10 @@ def retrieve_relevant_examples(
     if any(
         mk in low_t
         for mk in [
-            "radwimps", "paramore", "hayley", "yojiro", "vocal", "controle vocal",
+            "radwimps", "paramore", "sufjan", "hayley", "yojiro", "vocal", "controle vocal",
             "cantar", "canto", "cantando", "música", "musica", "banda", "belting",
-            "falsete", "alcance", "voz", "suzume", "sparkle", "decode"
+            "falsete", "alcance", "voz", "suzume", "sparkle", "decode", "mystery of love",
+            "fourth of july", "visions of gideon", "youtube.com", "youtu.be"
         ]
     ):
         for p in mood_bank.get("empolgado_amooo", []):
@@ -777,60 +779,175 @@ class CloneContactBot:
 
         return "Oxe\nperaí q deu ruim aq"
 
+    async def extract_youtube_info(self, text: str, event=None) -> str:
+        """
+        Detecta qualquer link do YouTube (watch, youtu.be, shorts, music.youtube)
+        e extrai Título da música/vídeo, Canal/Artista, Tags e Descrição/Letra!
+        """
+        search_blob = text or ""
+        if event and getattr(event, "message", None):
+            media = getattr(event.message, "media", None)
+            webpage = getattr(media, "webpage", None)
+            if webpage:
+                wp_url = getattr(webpage, "url", "") or ""
+                wp_title = getattr(webpage, "title", "") or ""
+                wp_desc = getattr(webpage, "description", "") or ""
+                search_blob += f" {wp_url} {wp_title} {wp_desc}"
+
+        vid_ids = []
+        for m in re.finditer(
+            r"(?:youtube\.com/(?:watch\?.*?v=|shorts/|embed/|live/)|youtu\.be/)([A-Za-z0-9_-]{11})",
+            search_blob,
+            flags=re.IGNORECASE,
+        ):
+            vid = m.group(1)
+            if vid not in vid_ids:
+                vid_ids.append(vid)
+
+        if not vid_ids:
+            return ""
+
+        summaries = []
+        for vid in vid_ids[:2]:
+            title = ""
+            author = ""
+            keywords_str = ""
+            desc_snippet = ""
+
+            # 1. Consulta rápida oEmbed (~150ms)
+            try:
+                r_oe = await self.http_client.get(
+                    f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={vid}&format=json",
+                    timeout=4.5,
+                )
+                if r_oe.status_code == 200:
+                    oe_data = r_oe.json()
+                    title = (oe_data.get("title") or "").strip()
+                    author = (oe_data.get("author_name") or "").strip()
+            except Exception:
+                pass
+
+            # 2. Extrai detalhes completos (Keywords + Descrição/Letra) da página do vídeo
+            try:
+                r_page = await self.http_client.get(
+                    f"https://www.youtube.com/watch?v={vid}",
+                    headers={
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+                        "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
+                    },
+                    timeout=5.5,
+                )
+                if r_page.status_code == 200:
+                    m_player = re.search(r"ytInitialPlayerResponse\s*=\s*(\{.+?\});", r_page.text)
+                    if m_player:
+                        pdata = json.loads(m_player.group(1))
+                        vd = pdata.get("videoDetails", {})
+                        title = title or (vd.get("title") or "").strip()
+                        author = author or (vd.get("author") or "").strip()
+                        kws = vd.get("keywords") or []
+                        if kws:
+                            keywords_str = ", ".join(kws[:10])
+                        short_desc = (vd.get("shortDescription") or "").strip()
+                        if short_desc:
+                            desc_lines = [ln.strip() for ln in short_desc.splitlines() if ln.strip() and "http" not in ln.lower()]
+                            desc_snippet = " | ".join(desc_lines[:5])[:280]
+            except Exception:
+                pass
+
+            if title:
+                info = f"[Vídeo/Música do YouTube enviado pela pessoa -> Título: \"{title}\" | Artista/Canal: \"{author}\""
+                if keywords_str:
+                    info += f" | Tags: {keywords_str}"
+                if desc_snippet:
+                    info += f" | Detalhes/Letra: {desc_snippet}"
+                info += " — Comente diretamente sobre essa música/vídeo, o vocal/melodia/vibe e o artista no seu estilo!]"
+                summaries.append(info)
+                print(f"🎬 [YouTube entendido]: {title} — {author}")
+
+        return "\n".join(summaries)
+
     async def transcribe_telegram_audio(self, event) -> str:
         """
-        Escuta e transcreve mensagens de voz (voice notes) e arquivos de áudio
-        enviados no Telegram usando Whisper Large V3 Turbo.
+        Escuta e entende mensagens de voz (voice notes), arquivos de áudio (MP3/OGG/M4A)
+        E vídeos enviados diretamente no Telegram (ex: clipes de música do Sufjan Stevens,
+        RADWIMPS, Paramore ou vídeos cantando) usando Whisper Large V3 Turbo!
         """
         msg = getattr(event, "message", None)
         if not msg:
             return ""
 
-        is_voice_or_audio = bool(getattr(msg, "voice", False) or getattr(msg, "audio", False))
+        is_voice = bool(getattr(msg, "voice", False))
+        is_audio = bool(getattr(msg, "audio", False))
+        is_video = bool(getattr(msg, "video", False) or getattr(msg, "video_note", False))
         file_obj = getattr(msg, "file", None)
-        mime_type = getattr(file_obj, "mime_type", "") or ""
-        if not is_voice_or_audio and not mime_type.startswith("audio/") and mime_type != "video/ogg":
+        mime_type = (getattr(file_obj, "mime_type", "") or "").lower()
+
+        if not (is_voice or is_audio or is_video or mime_type.startswith("audio/") or mime_type.startswith("video/")):
+            return ""
+
+        # Extrai metadados se o arquivo de áudio/vídeo tiver nome, título ou artista (ex: Sufjan Stevens)
+        meta_parts = []
+        for attr in ("title", "performer", "name"):
+            val = getattr(file_obj, attr, None)
+            if val and isinstance(val, str) and val.strip():
+                meta_parts.append(val.strip())
+        meta_str = " - ".join(dict.fromkeys(meta_parts))
+
+        # Evita baixar vídeos gigantes (> 24MB limite da API Whisper)
+        file_size = getattr(file_obj, "size", 0) or 0
+        if file_size > 24 * 1024 * 1024:
+            if meta_str:
+                return f"[Vídeo/Áudio enviado: {meta_str}]"
             return ""
 
         try:
-            audio_bytes = await msg.download_media(file=bytes)
-            if not audio_bytes:
-                return ""
+            media_bytes = await msg.download_media(file=bytes)
+            if not media_bytes:
+                return f"[Mídia enviada: {meta_str}]" if meta_str else ""
 
-            ext = getattr(file_obj, "ext", None) or ".ogg"
+            ext = getattr(file_obj, "ext", None) or (".mp4" if is_video or mime_type.startswith("video/") else ".ogg")
             if not ext.startswith("."):
                 ext = f".{ext}"
-            filename = f"telegram_voice{ext}"
-            content_type = mime_type if mime_type else "audio/ogg"
+            filename = f"telegram_media{ext}"
+            content_type = mime_type if mime_type else ("video/mp4" if ext == ".mp4" else "audio/ogg")
 
             if AI_API_KEY.startswith("gsk_"):
                 for whisper_model in ("whisper-large-v3-turbo", "whisper-large-v3"):
                     try:
+                        # Se for mensagem de voz do microfone, prioriza português; se for vídeo/música,
+                        # deixa o Whisper detectar o idioma automaticamente (inglês/japonês/português)!
+                        form_data = {
+                            "model": whisper_model,
+                            "prompt": (
+                                "Filipe (Lipe, lil), vei, vey, oxe, Sufjan Stevens, RADWIMPS, Paramore, "
+                                "Hayley Williams, Yojiro Noda, Mystery of Love, Fourth of July, Visions of Gideon, "
+                                "vocal, controle vocal, belting, falsete, astrofísica, universo, James Webb."
+                            ),
+                        }
+                        if is_voice:
+                            form_data["language"] = "pt"
+
                         resp = await self.http_client.post(
                             "https://api.groq.com/openai/v1/audio/transcriptions",
                             headers={"Authorization": f"Bearer {AI_API_KEY}"},
-                            files={"file": (filename, audio_bytes, content_type)},
-                            data={
-                                "model": whisper_model,
-                                "language": "pt",
-                                "prompt": (
-                                    "Conversa de voz no Telegram com Filipe (Lipe, lil). "
-                                    "Termos comuns: vei, vey, oxe, RADWIMPS, Paramore, Hayley Williams, "
-                                    "Yojiro Noda, vocal, controle vocal, belting, falsete, astrofísica, "
-                                    "cosmologia, universo, buraco negro, James Webb, Fortnite, Valorant, vava, Minecraft."
-                                ),
-                            },
-                            timeout=18.0,
+                            files={"file": (filename, media_bytes, content_type)},
+                            data=form_data,
+                            timeout=22.0,
                         )
                         if resp.status_code == 200:
                             transcript = (resp.json().get("text") or "").strip()
                             if transcript:
-                                return transcript
+                                kind_label = "Vídeo/Música" if (is_video or is_audio) else "Áudio de voz"
+                                if meta_str:
+                                    return f"[{kind_label} enviado ({meta_str}) — Som/Letra escutada: \"{transcript}\"]"
+                                return f"[{kind_label} escutado: \"{transcript}\"]" if not is_voice else transcript
                     except Exception:
                         continue
         except Exception as e:
-            print(f"⚠️ Erro ao escutar/transcrever áudio: {e}")
+            print(f"⚠️ Erro ao escutar áudio/vídeo: {e}")
 
+        if meta_str:
+            return f"[Vídeo/Música enviado: {meta_str}]"
         return ""
 
     async def process_debounced_reply(self, chat_id: int, contact_name: str):
@@ -926,12 +1043,12 @@ class CloneContactBot:
                 ),
             ]
         else:
-            # Mensagens espontâneas seguintes: puxa assuntos reais do Filipe (RADWIMPS/Paramore/Vocal, Astrofísica, Jogos, Afeto)
+            # Mensagens espontâneas seguintes: puxa assuntos reais do Filipe (RADWIMPS/Paramore/Sufjan Stevens/Vocal, Astrofísica, Jogos, Afeto)
             proactive_options = [
                 (
                     "empolgado_amooo",
-                    "radwimps paramore vocal controle vocal cantar música hayley williams yojiro",
-                    f"A pessoa está quieta e você resolveu puxar assunto POR CONTA PRÓPRIA agora ({br_ctx['hora_str']} - {br_ctx['periodo']}) falando sobre suas bandas favoritas (RADWIMPS e Paramore) ou sobre VOCAL e CONTROLE VOCAL! Comente que estava escutando ou cantando uma música do RADWIMPS ou do Paramore agora, reparando no controle vocal absurdo (belting, falsete, dinâmica da voz), e pergunte o que a pessoa tá ouvindo.",
+                    "radwimps paramore sufjan stevens vocal controle vocal cantar música hayley williams yojiro",
+                    f"A pessoa está quieta e você resolveu puxar assunto POR CONTA PRÓPRIA agora ({br_ctx['hora_str']} - {br_ctx['periodo']}) falando sobre suas bandas/artistas favoritos (RADWIMPS, Paramore ou Sufjan Stevens) ou sobre VOCAL e CONTROLE VOCAL! Comente que estava escutando ou cantando uma música do RADWIMPS, Paramore ou Sufjan Stevens agora, reparando no controle vocal absurdo (belting, falsete, dinâmica suave/potente da voz), e pergunte o que a pessoa tá ouvindo.",
                 ),
                 (
                     "reflexivo_pensativo",
@@ -1095,10 +1212,15 @@ class CloneContactBot:
 
             text = (event.raw_text or "").strip()
 
-            # Verifica se a pessoa enviou um áudio / mensagem de voz e escuta o conteúdo!
+            # 1. Verifica se a mensagem contém links do YouTube (músicas, clipes, Sufjan Stevens, RADWIMPS, Paramore, etc.)
+            yt_info = await self.extract_youtube_info(text, event)
+            if yt_info:
+                text = f"{text}\n{yt_info}".strip() if text else yt_info
+
+            # 2. Verifica se a pessoa enviou um áudio, mensagem de voz OU arquivo de vídeo/música e escuta o conteúdo!
             audio_transcript = await self.transcribe_telegram_audio(event)
             if audio_transcript:
-                print(f"🎙️ [Áudio escutado no chat {event.chat_id}]: {audio_transcript}")
+                print(f"🎙️ [Mídia escutada no chat {event.chat_id}]: {audio_transcript}")
                 text = f"{text}\n{audio_transcript}".strip() if text else audio_transcript
 
             if not text:
