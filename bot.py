@@ -905,27 +905,32 @@ class CloneContactBot:
             if not media_bytes:
                 return f"[Mídia enviada: {meta_str}]" if meta_str else ""
 
-            ext = getattr(file_obj, "ext", None) or (".mp4" if is_video or mime_type.startswith("video/") else ".ogg")
+            ext = (getattr(file_obj, "ext", None) or "").lower()
             if not ext.startswith("."):
-                ext = f".{ext}"
+                ext = f".{ext}" if ext else ""
+
+            # O Telegram usa '.oga' para mensagens de voz, mas a API Whisper exige '.ogg'!
+            allowed_exts = {".flac", ".mp3", ".mp4", ".mpeg", ".mpga", ".m4a", ".ogg", ".opus", ".wav", ".webm"}
+            if ext == ".oga" or (ext not in allowed_exts and not (is_video or mime_type.startswith("video/"))):
+                ext = ".ogg"
+            elif ext not in allowed_exts:
+                ext = ".mp4"
+
             filename = f"telegram_media{ext}"
-            content_type = mime_type if mime_type else ("video/mp4" if ext == ".mp4" else "audio/ogg")
+            content_type = "audio/ogg" if ext == ".ogg" else (mime_type or "video/mp4")
 
             if AI_API_KEY.startswith("gsk_"):
                 for whisper_model in ("whisper-large-v3-turbo", "whisper-large-v3"):
                     try:
-                        # Se for mensagem de voz do microfone, prioriza português; se for vídeo/música,
-                        # deixa o Whisper detectar o idioma automaticamente (inglês/japonês/português)!
                         form_data = {
                             "model": whisper_model,
                             "prompt": (
                                 "Filipe (Lipe, lil), vei, vey, oxe, Sufjan Stevens, RADWIMPS, Paramore, "
-                                "Hayley Williams, Yojiro Noda, Mystery of Love, Fourth of July, Visions of Gideon, "
+                                "Brick by Boring Brick, Fake Happy, Decode, Hayley Williams, Yojiro Noda, "
+                                "Mystery of Love, Fourth of July, Visions of Gideon, "
                                 "vocal, controle vocal, belting, falsete, astrofísica, universo, James Webb."
                             ),
                         }
-                        if is_voice:
-                            form_data["language"] = "pt"
 
                         resp = await self.http_client.post(
                             "https://api.groq.com/openai/v1/audio/transcriptions",
@@ -937,17 +942,27 @@ class CloneContactBot:
                         if resp.status_code == 200:
                             transcript = (resp.json().get("text") or "").strip()
                             if transcript:
-                                kind_label = "Vídeo/Música" if (is_video or is_audio) else "Áudio de voz"
+                                if is_voice:
+                                    return (
+                                        f"[Mandou um áudio de voz pra você falando/cantando: \"{transcript}\" "
+                                        f"— Você OUVIU esse áudio! Responda comentando diretamente o que ouviu no áudio!]"
+                                    )
+                                kind_label = "Vídeo/Música" if (is_video or is_audio) else "Áudio"
                                 if meta_str:
                                     return f"[{kind_label} enviado ({meta_str}) — Som/Letra escutada: \"{transcript}\"]"
-                                return f"[{kind_label} escutado: \"{transcript}\"]" if not is_voice else transcript
-                    except Exception:
+                                return f"[{kind_label} escutado: \"{transcript}\"]"
+                        else:
+                            print(f"⚠️ Whisper status {resp.status_code}: {resp.text[:160]}")
+                    except Exception as ex:
+                        print(f"⚠️ Erro na chamada Whisper ({whisper_model}): {ex}")
                         continue
         except Exception as e:
             print(f"⚠️ Erro ao escutar áudio/vídeo: {e}")
 
         if meta_str:
-            return f"[Vídeo/Música enviado: {meta_str}]"
+            return f"[Vídeo/Música enviado: {meta_str} — Você ouviu, comente sobre a música/vídeo!]"
+        if is_voice or is_audio:
+            return "[Mandou um áudio de voz / cantando pra você — Você ouviu o áudio! Comente sobre a voz/música com carinho!]"
         return ""
 
     async def process_debounced_reply(self, chat_id: int, contact_name: str):
