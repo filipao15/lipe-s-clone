@@ -238,6 +238,36 @@
     }
     .stat-val { font-size: 1.15rem; font-weight: 800; font-family: 'JetBrains Mono', monospace; color: var(--pink); }
     .stat-lbl { font-size: 0.65rem; color: var(--text-muted); margin-top: 2px; text-transform: uppercase; }
+    .freq-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 6px;
+    }
+    .freq-btn {
+      background: #181820;
+      border: 1px solid var(--border);
+      color: #cbd5e1;
+      padding: 9px 6px;
+      border-radius: 12px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      transition: all 0.15s ease;
+      text-align: center;
+    }
+    .freq-btn:active { transform: scale(0.97); }
+    .freq-btn.active {
+      background: linear-gradient(135deg, rgba(236, 72, 153, 0.28), rgba(168, 85, 247, 0.2));
+      border-color: var(--pink);
+      color: #fff;
+      box-shadow: 0 0 10px rgba(236, 72, 153, 0.3);
+    }
+    .freq-icon { font-size: 0.95rem; }
+    .freq-title { font-size: 0.76rem; font-weight: 700; }
+    .freq-pct { font-size: 0.65rem; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; }
+    .freq-btn.active .freq-pct { color: #f9a8d4; }
     .feed-container {
       max-height: 220px;
       overflow-y: auto;
@@ -360,6 +390,39 @@
         <input type="checkbox" id="imagesSwitch" onchange="updateSwitches()">
         <span class="slider"></span>
       </label>
+    </div>
+
+    <!-- FREQUÊNCIA DE IMAGENS -->
+    <div id="freqContainer" style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.06); transition: opacity 0.2s ease;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <span style="font-size: 0.78rem; font-weight: 700; color: #cbd5e1;">📸 Frequência de Fotos</span>
+        <span id="imgFreqBadge" style="font-size: 0.72rem; font-weight: 700; color: var(--pink); background: rgba(236,72,153,0.15); border: 1px solid rgba(236,72,153,0.3); padding: 2px 8px; border-radius: 10px;">Média (50%)</span>
+      </div>
+      <div class="freq-grid">
+        <button class="freq-btn" id="freqBtn-baixa" onclick="setImageFreq('baixa')">
+          <span class="freq-icon">➖</span>
+          <span class="freq-title">Menos (Baixa)</span>
+          <span class="freq-pct">20% • Rara</span>
+        </button>
+        <button class="freq-btn active" id="freqBtn-media" onclick="setImageFreq('media')">
+          <span class="freq-icon">⚖️</span>
+          <span class="freq-title">Média</span>
+          <span class="freq-pct">50% • Normal</span>
+        </button>
+        <button class="freq-btn" id="freqBtn-alta" onclick="setImageFreq('alta')">
+          <span class="freq-icon">➕</span>
+          <span class="freq-title">Mais (Alta)</span>
+          <span class="freq-pct">80% • Frequente</span>
+        </button>
+        <button class="freq-btn" id="freqBtn-maxima" onclick="setImageFreq('maxima')">
+          <span class="freq-icon">🔥</span>
+          <span class="freq-title">Máxima</span>
+          <span class="freq-pct">98% • Quase sempre</span>
+        </button>
+      </div>
+      <div id="freqDesc" style="font-size: 0.7rem; color: var(--text-muted); margin-top: 6px; text-align: center;">
+        Frequência equilibrada (50%) — Manda fotos com moderação
+      </div>
     </div>
   </div>
 
@@ -521,6 +584,35 @@
       document.getElementById('proactiveSwitch').checked = !!data.proactive_enabled;
       document.getElementById('imagesSwitch').checked = !!data.images_enabled;
 
+      // Frequência de Imagens
+      const curFreq = data.image_frequency || 'media';
+      currentState.image_frequency = curFreq;
+      const freqLabels = {
+        baixa: 'Baixa (20% • Menos)',
+        media: 'Média (50% • Normal)',
+        alta: 'Alta (80% • Mais)',
+        maxima: 'Máxima (98% • Quase sempre)'
+      };
+      const freqDescs = {
+        baixa: 'Pouca frequência (20%) — Prioriza texto, fotos bem raras',
+        media: 'Frequência equilibrada (50%) — Manda fotos com moderação',
+        alta: 'Mais frequência (80%) — Envia fotos em quase toda iniciativa',
+        maxima: 'Máxima frequência (98%) — Envia fotos sempre que possível!'
+      };
+      const badge = document.getElementById('imgFreqBadge');
+      if (badge) badge.innerText = freqLabels[curFreq] || curFreq;
+      const desc = document.getElementById('freqDesc');
+      if (desc) desc.innerText = freqDescs[curFreq] || '';
+      ['baixa', 'media', 'alta', 'maxima'].forEach(f => {
+        const btn = document.getElementById(`freqBtn-${f}`);
+        if (btn) btn.classList.toggle('active', f === curFreq);
+      });
+      const freqBox = document.getElementById('freqContainer');
+      if (freqBox) {
+        freqBox.style.opacity = data.images_enabled ? '1' : '0.4';
+        freqBox.style.pointerEvents = data.images_enabled ? 'auto' : 'none';
+      }
+
       // Mood
       const moodLabels = {
         auto: '🧠 Automático', empolgado: '🥰 Bem Afetivo', zoeira: '😂 Zoeira',
@@ -588,6 +680,10 @@
         proactive_enabled: document.getElementById('proactiveSwitch').checked,
         images_enabled: document.getElementById('imagesSwitch').checked
       });
+    }
+
+    function setImageFreq(freq) {
+      sendControl({ image_frequency: freq });
     }
 
     function setMood(m) {

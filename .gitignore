@@ -8,6 +8,8 @@ bot.pid
 
 # Histórico privado de conversas em tempo real
 data/chat_histories.json
+data/status.json
+data/actions/
 
 # Cache do Python
 __pycache__/

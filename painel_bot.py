@@ -224,7 +224,7 @@ def read_control() -> dict:
             return json.loads(CONTROL_PATH.read_text(encoding="utf-8"))
         except Exception:
             pass
-    return {"enabled": True, "proactive_enabled": True, "images_enabled": True, "forced_mood": "auto"}
+    return {"enabled": True, "proactive_enabled": True, "images_enabled": True, "image_frequency": "media", "forced_mood": "auto"}
 
 
 def write_control(data: dict):
@@ -429,6 +429,61 @@ def main():
     )
     btn_images.pack(fill="x", pady=2)
 
+    # Frequência de Imagens (Menos / Mais frequência)
+    freq_label_frame = tk.Frame(ctrl_box, bg="#121217")
+    freq_label_frame.pack(fill="x", pady=(4, 1))
+
+    tk.Label(
+        freq_label_frame,
+        text="📸 Freq. Fotos:",
+        font=("Segoe UI", 7, "bold"),
+        fg="#94a3b8",
+        bg="#121217",
+    ).pack(side="left")
+
+    lbl_cur_freq = tk.Label(
+        freq_label_frame,
+        text="Média",
+        font=("Segoe UI", 7, "bold"),
+        fg="#ec4899",
+        bg="#121217",
+    )
+    lbl_cur_freq.pack(side="right")
+
+    freq_btn_box = tk.Frame(ctrl_box, bg="#121217")
+    freq_btn_box.pack(fill="x", pady=(0, 2))
+
+    freq_buttons = {}
+    freq_defs = [
+        ("baixa", "➖ Menos", 0, 0),
+        ("media", "⚖️ Média", 0, 1),
+        ("alta", "➕ Mais", 1, 0),
+        ("maxima", "🔥 Máx", 1, 1),
+    ]
+
+    def set_image_frequency(f_val):
+        c = read_control()
+        c["image_frequency"] = f_val
+        write_control(c)
+        update_control_buttons(c)
+
+    for f_key, f_text, r, col in freq_defs:
+        fb = tk.Button(
+            freq_btn_box,
+            text=f_text,
+            font=("Segoe UI", 7, "bold"),
+            bg="#27272f",
+            fg="#cbd5e1",
+            relief="flat",
+            padx=2,
+            pady=3,
+            cursor="hand2",
+            command=lambda k=f_key: set_image_frequency(k),
+        )
+        fb.grid(row=r, column=col, sticky="nsew", padx=1, pady=1)
+        freq_btn_box.grid_columnconfigure(col, weight=1)
+        freq_buttons[f_key] = fb
+
     def toggle_proactive():
         c = read_control()
         c["proactive_enabled"] = not c.get("proactive_enabled", True)
@@ -555,6 +610,19 @@ def main():
             text=f"🖼️ Enviar Imagens: {'ON' if img else 'OFF'}",
             bg="#7c3aed" if img else "#475569",
         )
+        cur_f = c_data.get("image_frequency", "media")
+        f_names = {
+            "baixa": "Menos (20%)",
+            "media": "Média (50%)",
+            "alta": "Mais (80%)",
+            "maxima": "Máx (98%)",
+        }
+        lbl_cur_freq.config(text=f_names.get(cur_f, cur_f.capitalize()))
+        for fk, fb in freq_buttons.items():
+            if fk == cur_f:
+                fb.config(bg="#a855f7", fg="#ffffff")
+            else:
+                fb.config(bg="#27272f", fg="#94a3b8")
         fm = c_data.get("forced_mood", "auto")
         for k, b in mood_btns.items():
             if k == fm:

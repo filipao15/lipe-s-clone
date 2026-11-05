@@ -637,7 +637,43 @@ ACTIONS_DIR = BASE_DIR / "data" / "actions"
 OWNER_CHAT_ID = int(os.getenv("OWNER_CHAT_ID", "5377524441"))
 WEBAPP_URL = os.getenv("WEBAPP_URL", "https://filipao15.github.io/lipe-s-clone/")
 VALID_MOODS = {"auto", *FORCED_MODE_TO_KEY.keys()}
-IMAGE_CHANCE = float(os.getenv("IMAGE_CHANCE", "0.4"))
+
+# Níveis e controles de frequência de envio de imagens
+IMAGE_FREQUENCIES: Dict[str, Dict[str, Any]] = {
+    "baixa": {
+        "key": "baixa",
+        "label": "Baixa (Menos)",
+        "short_label": "Menos",
+        "chance": 0.20,
+        "cooldown": 1800,  # 30 minutos de intervalo mínimo
+        "desc": "Pouca frequência (20%) — Prioriza texto, fotos bem raras",
+    },
+    "media": {
+        "key": "media",
+        "label": "Média (Normal)",
+        "short_label": "Média",
+        "chance": 0.50,
+        "cooldown": 600,   # 10 minutos de intervalo mínimo
+        "desc": "Frequência equilibrada (50%) — Manda fotos com moderação",
+    },
+    "alta": {
+        "key": "alta",
+        "label": "Alta (Mais)",
+        "short_label": "Mais",
+        "chance": 0.80,
+        "cooldown": 180,   # 3 minutos de intervalo mínimo
+        "desc": "Mais frequência (80%) — Envia fotos em quase toda iniciativa",
+    },
+    "maxima": {
+        "key": "maxima",
+        "label": "Máxima",
+        "short_label": "Máx",
+        "chance": 0.98,
+        "cooldown": 45,    # 45 segundos
+        "desc": "Máxima frequência (98%) — Envia fotos sempre que possível!",
+    },
+}
+FREQ_ORDER: List[str] = ["baixa", "media", "alta", "maxima"]
 
 
 def get_local_ip() -> str:
@@ -680,6 +716,8 @@ class CloneContactBot:
         self.enabled: bool = True
         self.proactive_enabled: bool = True
         self.images_enabled: bool = True
+        self.image_frequency: str = "media"
+        self.last_image_sent: Dict[int, float] = {}
         self.forced_mood: str = "auto"
         self.recent_moods: Dict[int, Deque[str]] = {}
         self.pending_buffers: Dict[int, List[str]] = {}
@@ -715,6 +753,9 @@ class CloneContactBot:
                 self.enabled = bool(data.get("enabled", self.enabled))
                 self.proactive_enabled = bool(data.get("proactive_enabled", self.proactive_enabled))
                 self.images_enabled = bool(data.get("images_enabled", self.images_enabled))
+                f_freq = str(data.get("image_frequency", self.image_frequency)).lower().strip()
+                if f_freq in IMAGE_FREQUENCIES:
+                    self.image_frequency = f_freq
                 f_mood = str(data.get("forced_mood", self.forced_mood))
                 if f_mood in VALID_MOODS:
                     self.forced_mood = f_mood
@@ -730,6 +771,7 @@ class CloneContactBot:
             "enabled": self.enabled,
             "proactive_enabled": self.proactive_enabled,
             "images_enabled": self.images_enabled,
+            "image_frequency": self.image_frequency,
             "forced_mood": self.forced_mood,
             "updated_at": self.control_updated_at,
         }
@@ -751,6 +793,7 @@ class CloneContactBot:
 
     def _dump_status(self):
         br_ctx = get_brasilia_time_context()
+        freq_info = IMAGE_FREQUENCIES.get(self.image_frequency, IMAGE_FREQUENCIES["media"])
         data = {
             "online": True,
             "pid": os.getpid(),
@@ -758,6 +801,9 @@ class CloneContactBot:
             "enabled": self.enabled,
             "proactive_enabled": self.proactive_enabled,
             "images_enabled": self.images_enabled,
+            "image_frequency": self.image_frequency,
+            "image_frequency_label": freq_info.get("label", "Média (Normal)"),
+            "image_frequency_desc": freq_info.get("desc", ""),
             "forced_mood": self.forced_mood,
             "periodo": br_ctx["periodo"],
             "hora": br_ctx["hora_str"],
@@ -777,7 +823,8 @@ class CloneContactBot:
         for act_file in list(ACTIONS_DIR.glob("*.json")):
             try:
                 raw = act_file.read_text(encoding="utf-8")
-                act = json.loads(raw).get("action", "")
+                data_act = json.loads(raw)
+                act = data_act.get("action", "")
                 act_file.unlink(missing_ok=True)
                 if act == "proactive_now":
                     stage = self.proactive_stage.get(OWNER_CHAT_ID, 0) + 1
@@ -791,6 +838,22 @@ class CloneContactBot:
                     self.histories.pop(str(OWNER_CHAT_ID), None)
                     self._save_histories()
                     self._record_feed("sistema", "Memória limpa via painel", "sistema")
+                elif act == "img_freq_less":
+                    idx = FREQ_ORDER.index(self.image_frequency) if self.image_frequency in FREQ_ORDER else 1
+                    self.image_frequency = FREQ_ORDER[max(0, idx - 1)]
+                    self._save_control()
+                    self._record_feed("sistema", f"Freq. fotos: {self.image_frequency}", "sistema")
+                elif act == "img_freq_more":
+                    idx = FREQ_ORDER.index(self.image_frequency) if self.image_frequency in FREQ_ORDER else 1
+                    self.image_frequency = FREQ_ORDER[min(len(FREQ_ORDER) - 1, idx + 1)]
+                    self._save_control()
+                    self._record_feed("sistema", f"Freq. fotos: {self.image_frequency}", "sistema")
+                elif act.startswith("set_img_freq:"):
+                    target_f = act.split(":", 1)[1].strip()
+                    if target_f in IMAGE_FREQUENCIES:
+                        self.image_frequency = target_f
+                        self._save_control()
+                        self._record_feed("sistema", f"Freq. fotos: {target_f}", "sistema")
             except Exception as e:
                 print(f"⚠️ Erro ao processar ação {act_file.name}: {e}")
 
@@ -898,6 +961,7 @@ class CloneContactBot:
                 await self.client.send_file(chat_id, file=bio, caption=caption)
                 self.stats["imagens"] += 1
                 self.stats["msgs_enviadas"] += 1
+                self.last_image_sent[chat_id] = time.time()
                 self._record_feed("clone", f"🖼️ {topic_name}: {title}", "imagem")
                 print(f"🖼️ [FOTO ENVIADA #{self.stats['imagens']}] -> [{chat_id}]: {topic_name} ({title})")
                 return True
@@ -945,6 +1009,7 @@ class CloneContactBot:
         status_emoji = "🟢 LIGADO (Respondendo)" if self.enabled else "🔴 DESLIGADO (Pausado)"
         proactive_emoji = "🟢 ATIVA" if self.proactive_enabled else "🔴 PAUSADA"
         images_emoji = "🟢 ATIVAS" if self.images_enabled else "🔴 PAUSADAS"
+        freq_info = IMAGE_FREQUENCIES.get(self.image_frequency, IMAGE_FREQUENCIES["media"])
         mood_str = (
             "🧠 Automático Inteligente"
             if self.forced_mood == "auto"
@@ -956,6 +1021,7 @@ class CloneContactBot:
             f"**Status atual:** {status_emoji}\n"
             f"**Iniciativa Própria:** {proactive_emoji}\n"
             f"**Envio de Imagens:** {images_emoji} (Astro/Músicas)\n"
+            f"**Freq. de Imagens:** `{freq_info['label']}`\n"
             f"**Horário de Brasília:** `{br_ctx['hora_str']} ({br_ctx['dia_semana']})`\n"
             f"**Ritmo do Dia:** `{br_ctx['periodo']}`\n"
             f"**Humor:** `{mood_str}`\n"
@@ -976,6 +1042,11 @@ class CloneContactBot:
                     f"🖼️ Imagens: {'ON' if self.images_enabled else 'OFF'}",
                     b"clone_images_toggle",
                 ),
+            ],
+            [
+                Button.inline("➖ Menos Fotos", b"clone_img_freq_less"),
+                Button.inline(f"📸 {freq_info['short_label']}", b"clone_img_freq_cycle"),
+                Button.inline("➕ Mais Fotos", b"clone_img_freq_more"),
             ],
             [
                 Button.inline("⚡ Puxar Assunto", b"clone_proactive_now"),
@@ -1458,6 +1529,7 @@ class CloneContactBot:
                 if path.startswith("/api/status") and method == "GET":
                     self._sync_control()
                     br_ctx = get_brasilia_time_context()
+                    freq_info = IMAGE_FREQUENCIES.get(self.image_frequency, IMAGE_FREQUENCIES["media"])
                     payload = {
                         "online": True,
                         "pid": os.getpid(),
@@ -1465,6 +1537,9 @@ class CloneContactBot:
                         "enabled": self.enabled,
                         "proactive_enabled": self.proactive_enabled,
                         "images_enabled": self.images_enabled,
+                        "image_frequency": self.image_frequency,
+                        "image_frequency_label": freq_info.get("label", "Média (Normal)"),
+                        "image_frequency_desc": freq_info.get("desc", ""),
                         "forced_mood": self.forced_mood,
                         "periodo": br_ctx["periodo"],
                         "hora": br_ctx["hora_str"],
@@ -1490,17 +1565,23 @@ class CloneContactBot:
                             self.proactive_enabled = bool(data["proactive_enabled"])
                         if "images_enabled" in data:
                             self.images_enabled = bool(data["images_enabled"])
+                        if "image_frequency" in data and str(data["image_frequency"]).lower() in IMAGE_FREQUENCIES:
+                            self.image_frequency = str(data["image_frequency"]).lower()
                         if "forced_mood" in data and str(data["forced_mood"]) in VALID_MOODS:
                             self.forced_mood = str(data["forced_mood"])
                         self._save_control()
                     except Exception as e:
                         print(f"⚠️ Erro ao atualizar /api/control: {e}")
                     br_ctx = get_brasilia_time_context()
+                    freq_info = IMAGE_FREQUENCIES.get(self.image_frequency, IMAGE_FREQUENCIES["media"])
                     payload = {
                         "online": True,
                         "enabled": self.enabled,
                         "proactive_enabled": self.proactive_enabled,
                         "images_enabled": self.images_enabled,
+                        "image_frequency": self.image_frequency,
+                        "image_frequency_label": freq_info.get("label", "Média (Normal)"),
+                        "image_frequency_desc": freq_info.get("desc", ""),
                         "forced_mood": self.forced_mood,
                         "periodo": br_ctx["periodo"],
                         "hora": br_ctx["hora_str"],
@@ -1599,16 +1680,26 @@ class CloneContactBot:
                     )
 
                     if elapsed >= required_wait:
-                        self.proactive_stage[chat_id] = stage + 1
+                        new_stage = stage + 1
+                        self.proactive_stage[chat_id] = new_stage
                         self.last_interaction[chat_id] = time.time()
 
-                        # Envio autônomo de imagens (Astrofísica, Paramore, RADWIMPS, Sufjan)
+                        # Envio autônomo de imagens (Astrofísica, Paramore, RADWIMPS, Sufjan, Games)
                         sent_img = False
-                        if self.images_enabled and (stage >= 1 and (stage % 2 == 1 or random.random() < IMAGE_CHANCE)):
-                            sent_img = await self.send_autonomous_image(chat_id)
+                        if self.images_enabled:
+                            freq_cfg = IMAGE_FREQUENCIES.get(self.image_frequency, IMAGE_FREQUENCIES["media"])
+                            img_chance = freq_cfg["chance"]
+                            last_img_time = self.last_image_sent.get(chat_id, 0.0)
+                            cooldown_ok = (now - last_img_time) >= freq_cfg["cooldown"]
+
+                            # Alta/Máxima permite já no 1º silêncio; Baixa/Média aguarda pelo menos 2º silêncio
+                            allow_stage = (new_stage >= 1) if self.image_frequency in ("alta", "maxima") else (new_stage >= 2)
+
+                            if allow_stage and (cooldown_ok or new_stage >= 3) and (random.random() < img_chance):
+                                sent_img = await self.send_autonomous_image(chat_id)
 
                         if not sent_img:
-                            await self.send_proactive_message(chat_id, stage + 1)
+                            await self.send_proactive_message(chat_id, new_stage)
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -1655,6 +1746,51 @@ class CloneContactBot:
                     pass
                 status_msg = "🟢 Envio de Fotos ATIVO!" if self.images_enabled else "🔴 Envio de Fotos PAUSADO!"
                 await event.answer(status_msg)
+            elif data == "clone_img_freq_less":
+                idx = FREQ_ORDER.index(self.image_frequency) if self.image_frequency in FREQ_ORDER else 1
+                self.image_frequency = FREQ_ORDER[max(0, idx - 1)]
+                self._save_control()
+                text, buttons = self._build_control_panel_markup()
+                try:
+                    await event.edit(text, buttons=buttons)
+                except Exception:
+                    pass
+                lbl = IMAGE_FREQUENCIES[self.image_frequency]["label"]
+                await event.answer(f"🖼️ Freq. de fotos diminuída: {lbl}")
+            elif data == "clone_img_freq_more":
+                idx = FREQ_ORDER.index(self.image_frequency) if self.image_frequency in FREQ_ORDER else 1
+                self.image_frequency = FREQ_ORDER[min(len(FREQ_ORDER) - 1, idx + 1)]
+                self._save_control()
+                text, buttons = self._build_control_panel_markup()
+                try:
+                    await event.edit(text, buttons=buttons)
+                except Exception:
+                    pass
+                lbl = IMAGE_FREQUENCIES[self.image_frequency]["label"]
+                await event.answer(f"🖼️ Freq. de fotos aumentada: {lbl}")
+            elif data == "clone_img_freq_cycle":
+                idx = FREQ_ORDER.index(self.image_frequency) if self.image_frequency in FREQ_ORDER else 1
+                self.image_frequency = FREQ_ORDER[(idx + 1) % len(FREQ_ORDER)]
+                self._save_control()
+                text, buttons = self._build_control_panel_markup()
+                try:
+                    await event.edit(text, buttons=buttons)
+                except Exception:
+                    pass
+                lbl = IMAGE_FREQUENCIES[self.image_frequency]["label"]
+                await event.answer(f"🖼️ Frequência: {lbl}")
+            elif data.startswith("clone_img_freq_"):
+                target_f = data.replace("clone_img_freq_", "")
+                if target_f in IMAGE_FREQUENCIES:
+                    self.image_frequency = target_f
+                    self._save_control()
+                    text, buttons = self._build_control_panel_markup()
+                    try:
+                        await event.edit(text, buttons=buttons)
+                    except Exception:
+                        pass
+                    lbl = IMAGE_FREQUENCIES[self.image_frequency]["label"]
+                    await event.answer(f"🖼️ Frequência alterada para: {lbl}")
             elif data == "clone_proactive_now":
                 await event.answer("⚡ Puxando assunto por conta própria agora!")
                 stage = self.proactive_stage.get(event.chat_id, 0) + 1
@@ -1740,6 +1876,51 @@ class CloneContactBot:
                 self.last_interaction[event.chat_id] = time.time()
                 await self.send_autonomous_image(event.chat_id)
                 return
+
+            if low.startswith(("/fotos", "!fotos", "/freq", "!freq", "/imagem_freq")):
+                parts = low.split()
+                if len(parts) > 1:
+                    arg = parts[1].strip()
+                    idx = FREQ_ORDER.index(self.image_frequency) if self.image_frequency in FREQ_ORDER else 1
+                    if arg in ("menos", "diminuir", "baixo", "baixa", "-"):
+                        if arg in ("baixo", "baixa"):
+                            self.image_frequency = "baixa"
+                        else:
+                            self.image_frequency = FREQ_ORDER[max(0, idx - 1)]
+                    elif arg in ("mais", "aumentar", "alto", "alta", "+"):
+                        if arg in ("alto", "alta"):
+                            self.image_frequency = "alta"
+                        else:
+                            self.image_frequency = FREQ_ORDER[min(len(FREQ_ORDER) - 1, idx + 1)]
+                    elif arg in ("max", "maxima", "máxima", "fogo", "muito"):
+                        self.image_frequency = "maxima"
+                    elif arg in ("media", "média", "normal", "equilibrada"):
+                        self.image_frequency = "media"
+                    self._save_control()
+                    lbl = IMAGE_FREQUENCIES[self.image_frequency]["label"]
+                    desc = IMAGE_FREQUENCIES[self.image_frequency]["desc"]
+                    await event.reply(f"🖼️ Frequência de envio de fotos alterada para **{lbl}**!\n_{desc}_")
+                    return
+                else:
+                    freq_info = IMAGE_FREQUENCIES.get(self.image_frequency, IMAGE_FREQUENCIES["media"])
+                    btns = [
+                        [
+                            Button.inline("➖ Menos (Baixa)", b"clone_img_freq_baixa"),
+                            Button.inline("Média (Normal)", b"clone_img_freq_media"),
+                        ],
+                        [
+                            Button.inline("➕ Mais (Alta)", b"clone_img_freq_alta"),
+                            Button.inline("🔥 Máxima", b"clone_img_freq_maxima"),
+                        ],
+                    ]
+                    await event.reply(
+                        f"🖼️ **Controle de Frequência de Imagens**\n\n"
+                        f"Frequência atual: **{freq_info['label']}**\n"
+                        f"{freq_info['desc']}\n\n"
+                        f"Escolha abaixo com qual frequência quer que o clone envie fotos por conta própria:",
+                        buttons=btns,
+                    )
+                    return
 
             if low in ("/proactive", "!proactive", "/iniciativa", "!iniciativa"):
                 self.proactive_enabled = not self.proactive_enabled
