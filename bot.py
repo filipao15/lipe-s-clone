@@ -1,13 +1,18 @@
 import asyncio
+import hashlib
+import hmac
 import io
+import ipaddress
 import json
 import os
 import random
 import re
+import secrets
 import socket
 import subprocess
 import sys
 import time
+import urllib.parse
 from collections import deque
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -675,6 +680,10 @@ IMAGE_FREQUENCIES: Dict[str, Dict[str, Any]] = {
 }
 FREQ_ORDER: List[str] = ["baixa", "media", "alta", "maxima"]
 
+# Configurações de Segurança e Proteção Anti-Invasão do Servidor
+PANEL_PIN: str = os.getenv("PANEL_PIN", "1509").strip()
+SERVER_SECRET_KEY: str = os.getenv("SERVER_SECRET_KEY", "lipe_clone_sec_99a8b7c6d5e4f321").strip()
+
 
 def get_local_ip() -> str:
     try:
@@ -732,6 +741,14 @@ class CloneContactBot:
         self.feed: Deque[Dict[str, str]] = deque(maxlen=15)
         self.control_updated_at: float = 0.0
         self.recent_image_topics: Deque[str] = deque(maxlen=5)
+
+        # Segurança do Servidor e Proteção Anti-Invasão
+        self.panel_pin: str = PANEL_PIN
+        self.active_session_tokens: Dict[str, float] = {}  # token -> expiração
+        self.failed_auth_attempts: Dict[str, List[float]] = {}  # ip -> timestamps
+        self.banned_ips: Dict[str, float] = {}  # ip -> timestamp fim do ban
+        self.ip_request_history: Dict[str, List[float]] = {}  # ip -> timestamps rate limit
+
         self._load_control()
 
         # Controle de iniciativa própria (mensagens independentes caso o usuário não responda)
@@ -1478,12 +1495,146 @@ class CloneContactBot:
             await self.client.send_message(chat_id, bubble)
             print(f"💬 [INICIATIVA PRÓPRIA #{stage} | {mood_title}] -> [{chat_id}]: {bubble}")
 
+    # =========================================================================
+    # SEGURANÇA DO SERVIDOR, RATE LIMITING & AUTENTICAÇÃO
+    # =========================================================================
+    def is_ip_allowed(self, ip_str: str) -> bool:
+        """Permite apenas conexões vindas de IP privado (rede Wi-Fi local) ou localhost."""
+        try:
+            ip_obj = ipaddress.ip_address(ip_str)
+            return ip_obj.is_private or ip_obj.is_loopback
+        except Exception:
+            return False
+
+    def is_ip_banned(self, ip_str: str) -> Tuple[bool, int]:
+        """Verifica se o IP está temporariamente bloqueado por excesso de falhas."""
+        now = time.time()
+        unban_at = self.banned_ips.get(ip_str, 0.0)
+        if now < unban_at:
+            return True, max(1, int(unban_at - now))
+        elif ip_str in self.banned_ips:
+            del self.banned_ips[ip_str]
+        return False, 0
+
+    def check_rate_limit(self, ip_str: str, max_requests: int = 180, window_secs: int = 60) -> bool:
+        """Limita requisições por IP em janela deslizante para evitar DoS e travamento."""
+        now = time.time()
+        history = self.ip_request_history.setdefault(ip_str, [])
+        history = [t for t in history if now - t < window_secs]
+        if len(history) >= max_requests:
+            self.ip_request_history[ip_str] = history
+            return False
+        history.append(now)
+        self.ip_request_history[ip_str] = history
+        return True
+
+    def validate_session_token(self, token: str) -> bool:
+        """Valida se o token de sessão é autêntico e não expirou."""
+        if not token:
+            return False
+        clean_token = token.strip()
+        now = time.time()
+        expires = self.active_session_tokens.get(clean_token)
+        if expires and now < expires:
+            return True
+        elif clean_token in self.active_session_tokens:
+            del self.active_session_tokens[clean_token]
+        return False
+
+    def verify_pin_and_issue_token(self, candidate_pin: str, ip_str: str) -> Tuple[bool, str, int]:
+        """
+        Verifica o PIN com proteção contra timing attack e brute force.
+        Retorna (sucesso, token_ou_erro, tentativas_restantes).
+        """
+        now = time.time()
+        fails = [t for t in self.failed_auth_attempts.get(ip_str, []) if now - t < 600]
+        self.failed_auth_attempts[ip_str] = fails
+
+        cand = str(candidate_pin or "").strip()
+        expected = str(self.panel_pin).strip()
+
+        # Constant-time comparison contra timing attacks
+        if cand and hmac.compare_digest(cand, expected):
+            self.failed_auth_attempts.pop(ip_str, None)
+            token = secrets.token_urlsafe(32)
+            self.active_session_tokens[token] = now + (30 * 86400)  # 30 dias
+            print(f"🔐 [AUTH SUCESSO] IP {ip_str} autenticado com sucesso.")
+            return True, token, 5
+
+        # Se falhou:
+        fails.append(now)
+        self.failed_auth_attempts[ip_str] = fails
+        remaining = max(0, 5 - len(fails))
+        print(f"⚠️ [AUTH FALHA] IP {ip_str} errou o PIN. Restam {remaining} tentativas.")
+
+        if len(fails) >= 5:
+            self.banned_ips[ip_str] = now + 900  # Bloqueio de 15 minutos
+            self.failed_auth_attempts.pop(ip_str, None)
+            print(f"🚨 [IP BLOQUEADO] IP {ip_str} bloqueado por 15 minutos (brute force detectado).")
+            asyncio.create_task(self.notify_security_alert(ip_str))
+            return False, "IP bloqueado por 15 minutos por excesso de tentativas incorretas.", 0
+
+        return False, f"PIN incorreto! Restam {remaining} tentativas antes do bloqueio.", remaining
+
+    async def notify_security_alert(self, ip_str: str):
+        """Envia alerta de segurança imediato no Telegram do Filipe."""
+        try:
+            msg = (
+                f"🚨 **ALERTA DE SEGURANÇA NO SEU SERVIDOR!**\n\n"
+                f"Detectamos 5 tentativas incorretas de PIN no Painel Android vindas do IP:\n"
+                f"👉 `{ip_str}`\n\n"
+                f"🛡️ **Medida tomada:** O IP foi automaticamente **BLOQUEADO** por 15 minutos.\n"
+                f"Nenhum comando ou dado foi acessado."
+            )
+            await self.client.send_message(OWNER_CHAT_ID, msg)
+        except Exception as e:
+            print(f"⚠️ Erro ao enviar alerta de segurança: {e}")
+
+    def _update_env_pin(self, new_pin: str):
+        """Persiste novo PIN no arquivo .env para sobreviver a reinicializações."""
+        env_file = BASE_DIR / ".env"
+        if env_file.exists():
+            content = env_file.read_text(encoding="utf-8")
+            if "PANEL_PIN=" in content:
+                new_content = re.sub(r"PANEL_PIN=.*", f"PANEL_PIN={new_pin}", content)
+            else:
+                new_content = content + f"\nPANEL_PIN={new_pin}\n"
+            env_file.write_text(new_content, encoding="utf-8")
+
     async def start_android_server(self, port: int = 8765):
-        """Servidor Web ultraleve para o Painel de Controle no Android e Navegador."""
+        """Servidor Web seguro para o Painel de Controle no Android e Navegador."""
         web_file = BASE_DIR / "web" / "android_panel.html"
 
         async def handle_request(reader, writer):
             try:
+                peer = writer.get_extra_info("peername")
+                client_ip = peer[0] if peer else "127.0.0.1"
+
+                # 1. Checagem de Rede: Apenas LAN / Localhost
+                if not self.is_ip_allowed(client_ip):
+                    resp_b = b'{"ok": false, "error": "Acesso externo bloqueado. Conexao permitida apenas pela rede local."}'
+                    writer.write(b"HTTP/1.1 403 Forbidden\r\nContent-Type: application/json; charset=utf-8\r\nConnection: close\r\n\r\n" + resp_b)
+                    await writer.drain()
+                    writer.close()
+                    return
+
+                # 2. Checagem de Banimento Anti-Brute-Force
+                banned, ban_remaining = self.is_ip_banned(client_ip)
+                if banned:
+                    resp_b = json.dumps({"ok": False, "error": f"IP temporariamente bloqueado. Tente em {ban_remaining}s.", "banned": True}).encode("utf-8")
+                    writer.write(b"HTTP/1.1 429 Too Many Requests\r\nContent-Type: application/json; charset=utf-8\r\nConnection: close\r\n\r\n" + resp_b)
+                    await writer.drain()
+                    writer.close()
+                    return
+
+                # 3. Rate Limiting anti-DoS
+                if not self.check_rate_limit(client_ip, max_requests=180, window_secs=60):
+                    resp_b = b'{"ok": false, "error": "Muitas requisicoes. Aguarde um instante."}'
+                    writer.write(b"HTTP/1.1 429 Too Many Requests\r\nContent-Type: application/json; charset=utf-8\r\nConnection: close\r\n\r\n" + resp_b)
+                    await writer.drain()
+                    writer.close()
+                    return
+
                 line = await reader.readline()
                 if not line:
                     writer.close()
@@ -1511,21 +1662,101 @@ class CloneContactBot:
                         pass
 
                 body_bytes = b""
-                if content_length > 0:
+                if 0 < content_length <= 65536:
                     body_bytes = await reader.readexactly(content_length)
 
-                cors_headers = (
+                sec_headers = (
                     b"Access-Control-Allow-Origin: *\r\n"
                     b"Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
-                    b"Access-Control-Allow-Headers: Content-Type\r\n"
+                    b"Access-Control-Allow-Headers: Content-Type, Authorization, X-Auth-Token\r\n"
+                    b"X-Content-Type-Options: nosniff\r\n"
+                    b"X-Frame-Options: SAMEORIGIN\r\n"
+                    b"X-XSS-Protection: 1; mode=block\r\n"
+                    b"Referrer-Policy: strict-origin-when-cross-origin\r\n"
                 )
 
                 if method == "OPTIONS":
-                    writer.write(b"HTTP/1.1 204 No Content\r\n" + cors_headers + b"Connection: close\r\n\r\n")
+                    writer.write(b"HTTP/1.1 204 No Content\r\n" + sec_headers + b"Connection: close\r\n\r\n")
                     await writer.drain()
                     writer.close()
                     return
 
+                # Rota pública de autenticação (/api/auth)
+                if path.startswith("/api/auth") and method == "POST":
+                    try:
+                        data = json.loads(body_bytes.decode("utf-8", "ignore"))
+                        cand_pin = str(data.get("pin", "")).strip()
+                        ok, token_or_err, remaining = self.verify_pin_and_issue_token(cand_pin, client_ip)
+                        if ok:
+                            resp_b = json.dumps({"ok": True, "token": token_or_err}).encode("utf-8")
+                            writer.write(
+                                b"HTTP/1.1 200 OK\r\n"
+                                b"Content-Type: application/json; charset=utf-8\r\n"
+                                + sec_headers +
+                                f"Content-Length: {len(resp_b)}\r\nConnection: close\r\n\r\n".encode("latin1")
+                                + resp_b
+                            )
+                        else:
+                            st_code = b"429 Too Many Requests" if remaining == 0 else b"401 Unauthorized"
+                            resp_b = json.dumps({"ok": False, "error": token_or_err, "remaining": remaining}).encode("utf-8")
+                            writer.write(
+                                b"HTTP/1.1 " + st_code + b"\r\n"
+                                b"Content-Type: application/json; charset=utf-8\r\n"
+                                + sec_headers +
+                                f"Content-Length: {len(resp_b)}\r\nConnection: close\r\n\r\n".encode("latin1")
+                                + resp_b
+                            )
+                    except Exception as e:
+                        resp_b = b'{"ok": false, "error": "Requisicao invalida"}'
+                        writer.write(b"HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n" + resp_b)
+                    await writer.drain()
+                    writer.close()
+                    return
+
+                # Rota pública de arquivo HTML da interface
+                if not path.startswith("/api/"):
+                    html_b = web_file.read_bytes() if web_file.exists() else b"<h1>Painel Android</h1>"
+                    writer.write(
+                        b"HTTP/1.1 200 OK\r\n"
+                        b"Content-Type: text/html; charset=utf-8\r\n"
+                        + sec_headers +
+                        f"Content-Length: {len(html_b)}\r\nConnection: close\r\n\r\n".encode("latin1")
+                        + html_b
+                    )
+                    await writer.drain()
+                    writer.close()
+                    return
+
+                # =========================================================
+                # ROTAS PROTEGIDAS DA API (/api/status, /api/control, /api/action)
+                # Exige token de sessão válido!
+                # =========================================================
+                token = ""
+                auth_hdr = headers.get("authorization", "")
+                if auth_hdr.lower().startswith("bearer "):
+                    token = auth_hdr[7:].strip()
+                if not token:
+                    token = headers.get("x-auth-token", "").strip()
+                if not token and "?" in path:
+                    q_str = path.split("?", 1)[1]
+                    for q_param in q_str.split("&"):
+                        if q_param.startswith("token="):
+                            token = q_param.split("=", 1)[1].strip()
+
+                if not self.validate_session_token(token):
+                    resp_b = json.dumps({"ok": False, "error": "Acesso nao autorizado. Autenticacao com PIN necessaria.", "auth_required": True}).encode("utf-8")
+                    writer.write(
+                        b"HTTP/1.1 401 Unauthorized\r\n"
+                        b"Content-Type: application/json; charset=utf-8\r\n"
+                        + sec_headers +
+                        f"Content-Length: {len(resp_b)}\r\nConnection: close\r\n\r\n".encode("latin1")
+                        + resp_b
+                    )
+                    await writer.drain()
+                    writer.close()
+                    return
+
+                # --- 1. /api/status ---
                 if path.startswith("/api/status") and method == "GET":
                     self._sync_control()
                     br_ctx = get_brasilia_time_context()
@@ -1545,6 +1776,7 @@ class CloneContactBot:
                         "hora": br_ctx["hora_str"],
                         "local_ip": self.local_ip,
                         "android_url": f"http://{self.local_ip}:{port}",
+                        "security_active": True,
                         "stats": self.stats,
                         "ultimas": list(self.feed),
                     }
@@ -1552,10 +1784,12 @@ class CloneContactBot:
                     writer.write(
                         b"HTTP/1.1 200 OK\r\n"
                         b"Content-Type: application/json; charset=utf-8\r\n"
-                        + cors_headers +
+                        + sec_headers +
                         f"Content-Length: {len(resp_b)}\r\nConnection: close\r\n\r\n".encode("latin1")
                         + resp_b
                     )
+
+                # --- 2. /api/control ---
                 elif path.startswith("/api/control") and method == "POST":
                     try:
                         data = json.loads(body_bytes.decode("utf-8", "ignore"))
@@ -1585,6 +1819,7 @@ class CloneContactBot:
                         "forced_mood": self.forced_mood,
                         "periodo": br_ctx["periodo"],
                         "hora": br_ctx["hora_str"],
+                        "security_active": True,
                         "stats": self.stats,
                         "ultimas": list(self.feed),
                     }
@@ -1592,10 +1827,12 @@ class CloneContactBot:
                     writer.write(
                         b"HTTP/1.1 200 OK\r\n"
                         b"Content-Type: application/json; charset=utf-8\r\n"
-                        + cors_headers +
+                        + sec_headers +
                         f"Content-Length: {len(resp_b)}\r\nConnection: close\r\n\r\n".encode("latin1")
                         + resp_b
                     )
+
+                # --- 3. /api/action ---
                 elif path.startswith("/api/action") and method == "POST":
                     try:
                         data = json.loads(body_bytes.decode("utf-8", "ignore"))
@@ -1613,17 +1850,8 @@ class CloneContactBot:
                     resp_b = b'{"ok": true}'
                     writer.write(
                         b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n"
-                        + cors_headers +
+                        + sec_headers +
                         b"Content-Length: 12\r\nConnection: close\r\n\r\n" + resp_b
-                    )
-                else:
-                    html_b = web_file.read_bytes() if web_file.exists() else b"<h1>Painel Android</h1>"
-                    writer.write(
-                        b"HTTP/1.1 200 OK\r\n"
-                        b"Content-Type: text/html; charset=utf-8\r\n"
-                        + cors_headers +
-                        f"Content-Length: {len(html_b)}\r\nConnection: close\r\n\r\n".encode("latin1")
-                        + html_b
                     )
                 await writer.drain()
             except Exception:
@@ -1637,8 +1865,11 @@ class CloneContactBot:
 
         try:
             server = await asyncio.start_server(handle_request, "0.0.0.0", port)
-            print(f"📱 Servidor Painel Android ONLINE em http://{self.local_ip}:{port} (e http://localhost:{port})!")
+            print(f"🛡️ Servidor Painel Android SEGURO ONLINE em http://{self.local_ip}:{port} (PIN: {self.panel_pin})!")
             return server
+        except Exception as e:
+            print(f"⚠️ Aviso ao iniciar servidor Android na porta {port}: {e}")
+            return None
         except Exception as e:
             print(f"⚠️ Aviso ao iniciar servidor Android na porta {port}: {e}")
             return None
@@ -1708,6 +1939,11 @@ class CloneContactBot:
     async def start(self):
         @self.client.on(events.CallbackQuery)
         async def on_callback(event):
+            sender_id = event.sender_id or event.chat_id
+            if sender_id != OWNER_CHAT_ID:
+                await event.answer("⛔ Acesso negado! Apenas o dono do clone pode alterar as configurações.", alert=True)
+                return
+
             data = event.data.decode("utf-8")
             self.last_interaction[event.chat_id] = time.time()
             if data == "clone_on":
@@ -1856,100 +2092,141 @@ class CloneContactBot:
                 return
 
             low = text.lower()
-            if low in ("/android", "!android", "/celular", "!celular", "/app", "!app"):
-                msg = (
-                    f"📱 **Painel Do Meu Clone no Celular (Android)**\n\n"
-                    f"Acesse no navegador do seu celular (mesmo Wi-Fi):\n"
-                    f"👉 **`http://{self.local_ip}:8765`**\n\n"
-                    f"💡 *Dica:* no Chrome do Android, clique nos três pontinhos e em **'Adicionar à tela inicial'** para transformar num App com ícone!\n\n"
-                    f"Comandos rápidos no Telegram:\n"
-                    f"• `/on` e `/off` — Ligar / Desligar\n"
-                    f"• `/imagem` ou `/foto` — Mandar imagem favorita\n"
-                    f"• `/proactive` — Alternar iniciativa própria\n"
-                    f"• `/humor` — Gráfico de humores"
-                )
-                await event.reply(msg)
-                return
+            is_owner = (event.chat_id == OWNER_CHAT_ID)
 
-            if low in ("/imagem", "!imagem", "/foto", "!foto"):
-                await event.reply("🖼️ Deixa comigo, buscando uma foto maneira pra te mandar...")
-                self.last_interaction[event.chat_id] = time.time()
-                await self.send_autonomous_image(event.chat_id)
-                return
-
-            if low.startswith(("/fotos", "!fotos", "/freq", "!freq", "/imagem_freq")):
-                parts = low.split()
-                if len(parts) > 1:
-                    arg = parts[1].strip()
-                    idx = FREQ_ORDER.index(self.image_frequency) if self.image_frequency in FREQ_ORDER else 1
-                    if arg in ("menos", "diminuir", "baixo", "baixa", "-"):
-                        if arg in ("baixo", "baixa"):
-                            self.image_frequency = "baixa"
-                        else:
-                            self.image_frequency = FREQ_ORDER[max(0, idx - 1)]
-                    elif arg in ("mais", "aumentar", "alto", "alta", "+"):
-                        if arg in ("alto", "alta"):
-                            self.image_frequency = "alta"
-                        else:
-                            self.image_frequency = FREQ_ORDER[min(len(FREQ_ORDER) - 1, idx + 1)]
-                    elif arg in ("max", "maxima", "máxima", "fogo", "muito"):
-                        self.image_frequency = "maxima"
-                    elif arg in ("media", "média", "normal", "equilibrada"):
-                        self.image_frequency = "media"
-                    self._save_control()
-                    lbl = IMAGE_FREQUENCIES[self.image_frequency]["label"]
-                    desc = IMAGE_FREQUENCIES[self.image_frequency]["desc"]
-                    await event.reply(f"🖼️ Frequência de envio de fotos alterada para **{lbl}**!\n_{desc}_")
-                    return
+            # Comando de segurança /pin (Apenas Filipe / OWNER_CHAT_ID)
+            if low.startswith(("/pin", "!pin")):
+                if not is_owner:
+                    print(f"🛡️ [SEGURANÇA] Bloqueada tentativa não autorizada de acessar /pin por chat {event.chat_id}")
                 else:
-                    freq_info = IMAGE_FREQUENCIES.get(self.image_frequency, IMAGE_FREQUENCIES["media"])
-                    btns = [
-                        [
-                            Button.inline("➖ Menos (Baixa)", b"clone_img_freq_baixa"),
-                            Button.inline("Média (Normal)", b"clone_img_freq_media"),
-                        ],
-                        [
-                            Button.inline("➕ Mais (Alta)", b"clone_img_freq_alta"),
-                            Button.inline("🔥 Máxima", b"clone_img_freq_maxima"),
-                        ],
-                    ]
-                    await event.reply(
-                        f"🖼️ **Controle de Frequência de Imagens**\n\n"
-                        f"Frequência atual: **{freq_info['label']}**\n"
-                        f"{freq_info['desc']}\n\n"
-                        f"Escolha abaixo com qual frequência quer que o clone envie fotos por conta própria:",
-                        buttons=btns,
+                    parts = text.split()
+                    if len(parts) > 1:
+                        new_pin = parts[1].strip()
+                        if len(new_pin) < 4:
+                            await event.reply("⚠️ O PIN de segurança deve ter pelo menos 4 dígitos.")
+                            return
+                        self.panel_pin = new_pin
+                        self.active_session_tokens.clear()
+                        self._update_env_pin(new_pin)
+                        await event.reply(
+                            f"🔐 **PIN DE SEGURANÇA ATUALIZADO COM SUCESSO!**\n\n"
+                            f"Novo PIN: **`{new_pin}`**\n"
+                            f"Todas as sessões anteriores foram desconectadas por segurança.\n\n"
+                            f"👉 Link com login automático:\n"
+                            f"`http://{self.local_ip}:8765/?pin={new_pin}`"
+                        )
+                        return
+                    else:
+                        await event.reply(
+                            f"🔐 **Segurança do Servidor & Painel Android**\n\n"
+                            f"• **PIN de Acesso Atual:** `{self.panel_pin}`\n"
+                            f"• **IP Local:** `{self.local_ip}`\n"
+                            f"• **Proteções Ativas:** 🛡️ Anti-Brute Force (5 erros = ban 15m) + Rate Limit + HMAC Tokens\n"
+                            f"• **Sessões Ativas:** `{len(self.active_session_tokens)}`\n\n"
+                            f"💡 Para alterar o PIN agora, envie:\n`/pin <novo_pin>` (ex: `/pin 7788`)\n\n"
+                            f"👉 Link com login automático:\n"
+                            f"`http://{self.local_ip}:8765/?pin={self.panel_pin}`"
+                        )
+                        return
+
+            if is_owner:
+                if low in ("/android", "!android", "/celular", "!celular", "/app", "!app"):
+                    msg = (
+                        f"📱 **Painel Do Meu Clone no Celular (Android)**\n\n"
+                        f"Acesse no navegador do seu celular (mesmo Wi-Fi):\n"
+                        f"👉 **`http://{self.local_ip}:8765/?pin={self.panel_pin}`**\n\n"
+                        f"🔐 **Seu PIN de Segurança:** `{self.panel_pin}`\n\n"
+                        f"💡 *Dica:* no Chrome do Android, clique nos três pontinhos e em **'Adicionar à tela inicial'** para transformar num App com ícone!\n\n"
+                        f"Comandos rápidos no Telegram:\n"
+                        f"• `/pin` — Ver ou alterar senha do painel\n"
+                        f"• `/on` e `/off` — Ligar / Desligar\n"
+                        f"• `/imagem` ou `/foto` — Mandar imagem favorita\n"
+                        f"• `/fotos [menos|mais|alta|baixa]` — Regular frequência\n"
+                        f"• `/proactive` — Alternar iniciativa própria\n"
+                        f"• `/humor` — Gráfico de humores"
                     )
+                    await event.reply(msg)
                     return
 
-            if low in ("/proactive", "!proactive", "/iniciativa", "!iniciativa"):
-                self.proactive_enabled = not self.proactive_enabled
-                self._save_control()
-                status_txt = "🟢 ATIVA" if self.proactive_enabled else "🔴 PAUSADA"
-                await event.reply(f"💬 Iniciativa Própria: {status_txt}")
-                return
+                if low in ("/imagem", "!imagem", "/foto", "!foto"):
+                    await event.reply("🖼️ Deixa comigo, buscando uma foto maneira pra te mandar...")
+                    self.last_interaction[event.chat_id] = time.time()
+                    await self.send_autonomous_image(event.chat_id)
+                    return
 
-            if low in ("/painel", "!painel", "/menu", "!menu", "/status", "!status"):
-                panel_text, buttons = self._build_control_panel_markup()
-                await event.reply(panel_text, buttons=buttons)
-                return
+                if low.startswith(("/fotos", "!fotos", "/freq", "!freq", "/imagem_freq")):
+                    parts = low.split()
+                    if len(parts) > 1:
+                        arg = parts[1].strip()
+                        idx = FREQ_ORDER.index(self.image_frequency) if self.image_frequency in FREQ_ORDER else 1
+                        if arg in ("menos", "diminuir", "baixo", "baixa", "-"):
+                            if arg in ("baixo", "baixa"):
+                                self.image_frequency = "baixa"
+                            else:
+                                self.image_frequency = FREQ_ORDER[max(0, idx - 1)]
+                        elif arg in ("mais", "aumentar", "alto", "alta", "+"):
+                            if arg in ("alto", "alta"):
+                                self.image_frequency = "alta"
+                            else:
+                                self.image_frequency = FREQ_ORDER[min(len(FREQ_ORDER) - 1, idx + 1)]
+                        elif arg in ("max", "maxima", "máxima", "fogo", "muito"):
+                            self.image_frequency = "maxima"
+                        elif arg in ("media", "média", "normal", "equilibrada"):
+                            self.image_frequency = "media"
+                        self._save_control()
+                        lbl = IMAGE_FREQUENCIES[self.image_frequency]["label"]
+                        desc = IMAGE_FREQUENCIES[self.image_frequency]["desc"]
+                        await event.reply(f"🖼️ Frequência de envio de fotos alterada para **{lbl}**!\n_{desc}_")
+                        return
+                    else:
+                        freq_info = IMAGE_FREQUENCIES.get(self.image_frequency, IMAGE_FREQUENCIES["media"])
+                        btns = [
+                            [
+                                Button.inline("➖ Menos (Baixa)", b"clone_img_freq_baixa"),
+                                Button.inline("Média (Normal)", b"clone_img_freq_media"),
+                            ],
+                            [
+                                Button.inline("➕ Mais (Alta)", b"clone_img_freq_alta"),
+                                Button.inline("🔥 Máxima", b"clone_img_freq_maxima"),
+                            ],
+                        ]
+                        await event.reply(
+                            f"🖼️ **Controle de Frequência de Imagens**\n\n"
+                            f"Frequência atual: **{freq_info['label']}**\n"
+                            f"{freq_info['desc']}\n\n"
+                            f"Escolha abaixo com qual frequência quer que o clone envie fotos por conta própria:",
+                            buttons=btns,
+                        )
+                        return
 
-            if low in ("/humor", "!humor"):
-                chart_msg, chart_btns = format_telegram_mood_chart(self.forced_mood)
-                await event.reply(chart_msg, buttons=chart_btns)
-                return
+                if low in ("/proactive", "!proactive", "/iniciativa", "!iniciativa"):
+                    self.proactive_enabled = not self.proactive_enabled
+                    self._save_control()
+                    status_txt = "🟢 ATIVA" if self.proactive_enabled else "🔴 PAUSADA"
+                    await event.reply(f"💬 Iniciativa Própria: {status_txt}")
+                    return
 
-            if low in ("/off", "!off", "!bot off"):
-                self.enabled = False
-                panel_text, buttons = self._build_control_panel_markup()
-                await event.reply(panel_text, buttons=buttons)
-                return
+                if low in ("/painel", "!painel", "/menu", "!menu", "/status", "!status"):
+                    panel_text, buttons = self._build_control_panel_markup()
+                    await event.reply(panel_text, buttons=buttons)
+                    return
 
-            if low in ("/on", "!on", "!bot on"):
-                self.enabled = True
-                panel_text, buttons = self._build_control_panel_markup()
-                await event.reply(panel_text, buttons=buttons)
-                return
+                if low in ("/humor", "!humor"):
+                    chart_msg, chart_btns = format_telegram_mood_chart(self.forced_mood)
+                    await event.reply(chart_msg, buttons=chart_btns)
+                    return
+
+                if low in ("/off", "!off", "!bot off"):
+                    self.enabled = False
+                    panel_text, buttons = self._build_control_panel_markup()
+                    await event.reply(panel_text, buttons=buttons)
+                    return
+
+                if low in ("/on", "!on", "!bot on"):
+                    self.enabled = True
+                    panel_text, buttons = self._build_control_panel_markup()
+                    await event.reply(panel_text, buttons=buttons)
+                    return
 
             if low in ("/start", "!reset", "/reset"):
                 self.histories.pop(str(event.chat_id), None)

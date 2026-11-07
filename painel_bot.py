@@ -355,9 +355,10 @@ def main():
     )
     telemetry_lbl.pack(fill="x", pady=(2, 0))
 
+    cur_pin = os.getenv("PANEL_PIN", "1509")
     android_lbl = tk.Label(
         title_box,
-        text="📱 Controle Android: http://192.168.18.3:8765 (Conecte pelo celular no mesmo Wi-Fi)",
+        text=f"🛡️ Controle Android Seguro: http://192.168.18.3:8765 (PIN: {cur_pin})",
         font=("Segoe UI", 8, "bold"),
         fg="#38bdf8",
         bg="#121217",
@@ -875,7 +876,8 @@ def main():
             try:
                 st = json.loads(STATUS_PATH.read_text(encoding="utf-8"))
                 if "local_ip" in st:
-                    android_lbl.config(text=f"📱 Controle Android: http://{st['local_ip']}:8765 (Mesmo Wi-Fi)")
+                    pin_str = st.get("security_pin", os.getenv("PANEL_PIN", "1509"))
+                    android_lbl.config(text=f"🛡️ Controle Android Seguro: http://{st['local_ip']}:8765 (PIN: {pin_str})")
                 s = st.get("stats", {})
                 stats_labels["rec"].config(text=f"📩 Recebidas: {s.get('msgs_recebidas', 0)}")
                 stats_labels["env"].config(text=f"⚡ Enviadas: {s.get('msgs_enviadas', 0)}")

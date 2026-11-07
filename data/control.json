@@ -1,1 +1,8 @@
-{"enabled": true, "proactive_enabled": true, "images_enabled": true, "image_frequency": "media", "forced_mood": "zoeira", "updated_at": 1793846973.5300746}
+{
+  "enabled": true,
+  "proactive_enabled": true,
+  "images_enabled": false,
+  "image_frequency": "baixa",
+  "forced_mood": "auto",
+  "updated_at": 1793895661.4163482
+}
